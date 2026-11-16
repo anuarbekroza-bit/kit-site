@@ -1,0 +1,269 @@
+# Админ-панель сайта «Кит» (Pages CMS: https://app.pagescms.org)
+# Здесь только описание формы. Паролей и ключей в этом файле нет и не должно быть.
+
+media:
+  input: images
+  output: /images
+  categories: [image]
+
+content:
+  - name: products
+    label: "🛍 Товары (Новинки)"
+    type: file
+    path: _data/products.yml
+    format: yaml
+    fields:
+      - name: items
+        label: "Товары"
+        type: object
+        list:
+          collapsible:
+            collapsed: true
+            summary: "{name_ru} · {price}"
+        fields:
+          - name: name_ru
+            label: "Название (на русском)"
+            type: string
+            required: true
+          - name: name_kk
+            label: "Атауы (қазақша)"
+            type: string
+            description: "Если оставить пустым, на казахской версии будет русское название."
+          - name: price
+            label: "Цена, ₸"
+            type: string
+            description: "Только число, например: 14 500. Пусто — на сайте будет «Цену уточняйте в WhatsApp»."
+          - name: sizes
+            label: "Рост"
+            type: string
+            description: "Например: 110–140 см. Можно оставить пустым."
+          - name: image
+            label: "Фото товара"
+            type: image
+            description: "Лучше вертикальное фото. Можно загрузить новое с компьютера или телефона."
+          - name: show
+            label: "Показывать на сайте"
+            type: boolean
+            default: true
+
+  - name: categories
+    label: "🗂 Разделы каталога"
+    type: file
+    path: _data/categories.yml
+    format: yaml
+    fields:
+      - name: items
+        label: "Разделы"
+        type: object
+        list:
+          collapsible:
+            collapsed: true
+            summary: "{name_ru}"
+        fields:
+          - name: name_ru
+            label: "Название раздела (на русском)"
+            type: string
+            required: true
+          - name: name_kk
+            label: "Бөлім атауы (қазақша)"
+            type: string
+          - name: image
+            label: "Фото раздела"
+            type: image
+            description: "Если фото нет, на сайте будет надпись «Фото скоро»."
+          - name: show
+            label: "Показывать на сайте"
+            type: boolean
+            default: true
+
+  - name: ages
+    label: "📏 Плитки по росту"
+    type: file
+    path: _data/ages.yml
+    format: yaml
+    fields:
+      - name: items
+        label: "Плитки"
+        type: object
+        list:
+          collapsible:
+            collapsed: true
+            summary: "{name_ru} — {sizes} см"
+        fields:
+          - name: name_ru
+            label: "Для кого (на русском)"
+            type: string
+            required: true
+          - name: name_kk
+            label: "Кімге (қазақша)"
+            type: string
+          - name: sizes
+            label: "Рост, см"
+            type: string
+            description: "Только цифры, например: 90–130. Слова «рост» и «см» сайт добавит сам."
+
+  - name: contacts
+    label: "📞 Телефон, адрес, часы работы"
+    type: file
+    path: _data/contacts.yml
+    format: yaml
+    fields:
+      - name: phone
+        label: "Телефон (как показывать на сайте)"
+        type: string
+        description: "Например: +7 702 440 50 09"
+      - name: whatsapp
+        label: "Номер для кнопок WhatsApp"
+        type: string
+        description: "Только цифры, начиная с 7, без + и пробелов. Например: 77024405009"
+        pattern:
+          regex: "^7\\d{10}$"
+          message: "11 цифр, начиная с 7, без пробелов и знака +"
+      - name: hours
+        label: "Часы работы"
+        type: string
+        description: "Например: 10:00–20:00"
+      - name: address_ru
+        label: "Адрес полностью (на русском)"
+        type: string
+      - name: address_kk
+        label: "Толық мекенжай (қазақша)"
+        type: string
+      - name: address_short_ru
+        label: "Адрес коротко для верха сайта (на русском)"
+        type: string
+        description: "Например: Женис, 26А"
+      - name: address_short_kk
+        label: "Қысқа мекенжай (қазақша)"
+        type: string
+      - name: delivery_ru
+        label: "Доставка (на русском)"
+        type: string
+      - name: delivery_kk
+        label: "Жеткізу (қазақша)"
+        type: string
+      - name: instagram
+        label: "Instagram (без @)"
+        type: string
+      - name: twogis_url
+        label: "Ссылка на магазин в 2ГИС"
+        type: string
+      - name: rating
+        label: "Рейтинг в 2ГИС"
+        type: string
+        description: "Например: 4,7"
+      - name: ratings_count
+        label: "Сколько оценок в 2ГИС"
+        type: string
+      - name: reviews_count
+        label: "Сколько отзывов в 2ГИС"
+        type: string
+
+  - name: texts
+    label: "✏️ Тексты и главное фото"
+    type: file
+    path: _data/texts.yml
+    format: yaml
+    fields:
+      - name: hero_image
+        label: "Главное фото (вверху сайта)"
+        type: image
+      - name: hero_badge_ru
+        label: "Надпись над заголовком (на русском)"
+        type: string
+      - name: hero_badge_kk
+        label: "Тақырып үстіндегі жазу (қазақша)"
+        type: string
+      - name: hero_title_ru
+        label: "Главный заголовок (на русском)"
+        type: string
+      - name: hero_title_kk
+        label: "Басты тақырып (қазақша)"
+        type: string
+      - name: hero_text_ru
+        label: "Текст под заголовком (на русском)"
+        type: text
+      - name: hero_text_kk
+        label: "Тақырып астындағы мәтін (қазақша)"
+        type: text
+      - name: catalog_text_ru
+        label: "Подпись под «Каталог» (на русском)"
+        type: string
+      - name: catalog_text_kk
+        label: "«Каталог» астындағы жазу (қазақша)"
+        type: string
+      - name: steps
+        label: "Шаги «Как заказать»"
+        type: object
+        list:
+          collapsible:
+            collapsed: true
+            summary: "{title_ru}"
+        fields:
+          - name: title_ru
+            label: "Шаг (на русском)"
+            type: string
+          - name: title_kk
+            label: "Қадам (қазақша)"
+            type: string
+          - name: text_ru
+            label: "Пояснение (на русском)"
+            type: text
+          - name: text_kk
+            label: "Түсініктеме (қазақша)"
+            type: text
+      - name: instagram_text_ru
+        label: "Подпись к блоку Instagram (на русском)"
+        type: string
+      - name: instagram_text_kk
+        label: "Instagram блогының жазуы (қазақша)"
+        type: string
+      - name: store_photo
+        label: "Фото магазина (в блоке «Контакты»)"
+        type: image
+
+  - name: reviews
+    label: "⭐ Отзывы"
+    type: file
+    path: _data/reviews.yml
+    format: yaml
+    fields:
+      - name: items
+        label: "Отзывы"
+        type: object
+        list:
+          collapsible:
+            collapsed: true
+            summary: "{name} — {date_ru}"
+        fields:
+          - name: name
+            label: "Имя покупателя"
+            type: string
+            required: true
+          - name: text
+            label: "Текст отзыва (как написал покупатель)"
+            type: text
+            required: true
+          - name: date_ru
+            label: "Дата (на русском)"
+            type: string
+            description: "Например: 12 ноября 2026"
+          - name: date_kk
+            label: "Күні (қазақша)"
+            type: string
+            description: "Мысалы: 12 қараша 2026"
+
+  - name: gallery
+    label: "📸 Фото в блоке Instagram"
+    type: file
+    path: _data/gallery.yml
+    format: yaml
+    fields:
+      - name: items
+        label: "Фото"
+        type: object
+        list: true
+        fields:
+          - name: image
+            label: "Фото"
+            type: image

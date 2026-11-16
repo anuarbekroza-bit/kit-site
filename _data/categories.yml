@@ -1,0 +1,21 @@
+items:
+  - name_ru: "Зимние куртки"
+    name_kk: "Қысқы курткалар"
+    image: "/images/kit-winter.jpg"
+    show: true
+  - name_ru: "Осенние куртки"
+    name_kk: "Күзгі курткалар"
+    image: "/images/kit-autumn.jpg"
+    show: true
+  - name_ru: "Шапки"
+    name_kk: "Бас киімдер"
+    image: "/images/kit-hats.jpg"
+    show: true
+  - name_ru: "Школа"
+    name_kk: "Мектеп"
+    image: "/images/kit-school.jpg"
+    show: true
+  - name_ru: "Лето"
+    name_kk: "Жаз"
+    image: ""
+    show: true

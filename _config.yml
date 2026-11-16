@@ -1,0 +1,6 @@
+# Настройки сборки сайта (GitHub Pages собирает сайт сам, бесплатно)
+title: "Кит — детская и подростковая одежда в Астане"
+url: "https://anuarbekroza-bit.github.io"
+baseurl: "/kit-site"
+exclude:
+  - README.md

@@ -1,308 +1,337 @@
+---
+layout: null
+---
+{%- assign c = site.data.contacts -%}
+{%- assign t = site.data.texts -%}
+{%- assign wa = "https://wa.me/" | append: c.whatsapp -%}
+{%- assign ig = "https://instagram.com/" | append: c.instagram -%}
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-kk-title="Кит — балалар мен жасөспірімдер киімі, Астана">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Кит — детская и подростковая одежда в Астане</title>
-<meta name="description" content="Магазин детской и подростковой одежды «Кит» в Астане, проспект Женис, 26А. Размеры от 73 до 170 см, доставка по Казахстану, подбор размера в WhatsApp.">
+<meta name="description" content="Магазин детской и подростковой одежды «Кит» в Астане, {{ c.address_short_ru | escape }}. Доставка по Казахстану, подбор размера в WhatsApp.">
 <meta property="og:title" content="Кит — детская и подростковая одежда в Астане">
-<meta property="og:description" content="Женис, 26А · 10:00–20:00 · Доставка по Казахстану">
-<meta property="og:image" content="images/kit-hero.jpg">
+<meta property="og:description" content="{{ c.address_short_ru | escape }} · {{ c.hours | escape }} · Доставка по Казахстану">
+<meta property="og:image" content="{{ t.hero_image | absolute_url }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
 <style>
-body{margin:0;background:#F5FBFD}
-a{color:#0F2A44}a:hover{color:#17739A}
+:root{--ink:#0F2A44;--muted:#3E5068;--accent:#17739A;--sky:#8ED0E8;--sky-l:#DFF2F9;--line:#DCEEF5;--bg:#F5FBFD;--sun:#FFF4C7;--peach:#FFE3D6;--mint:#E2F3EA}
+*{box-sizing:border-box}
 html{scroll-behavior:smooth}
-.lang-switch{display:inline-flex;border:1.5px solid #0F2A44;border-radius:999px;overflow:hidden;background:#fff}
-.lang-switch button{font:700 14px 'Manrope',system-ui,sans-serif;color:#0F2A44;background:transparent;border:0;padding:0 14px;min-height:44px;min-width:56px;cursor:pointer}
-.lang-switch button[aria-pressed="true"]{background:#0F2A44;color:#fff}
-.lang-switch button:focus-visible{outline:3px solid #8ED0E8;outline-offset:-3px}
-
-img{max-width:100%}
-@media (max-width:640px){h1{font-size:36px!important} h2{font-size:28px!important} #top>div:last-child{height:420px!important} #order>div{padding:36px 24px!important}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Manrope',system-ui,sans-serif}
+a{color:var(--ink)}a:hover{color:var(--accent)}
+img{max-width:100%;display:block}
+.wrap{max-width:1200px;margin:0 auto;padding:0 24px}
+.h{font-family:'Unbounded',sans-serif;font-weight:700;margin:0}
+h2.h{font-size:36px}
+.btn{display:inline-flex;align-items:center;gap:8px;text-decoration:none;font-weight:700;font-size:16px;padding:14px 24px;border-radius:999px;min-height:44px}
+.btn-main{background:var(--accent);color:#fff}.btn-main:hover{color:#fff;filter:brightness(1.08)}
+.btn-line{background:#fff;color:var(--ink);border:2px solid var(--ink)}
+.btn-dark{background:var(--ink);color:#fff}.btn-dark:hover{color:#fff}
+.muted{color:var(--muted)}
+section{padding:48px 0}
+.head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:32px}
+.grid{display:flex;flex-wrap:wrap;gap:20px}
+/* header */
+header{background:#fff;border-bottom:1px solid var(--line)}
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;padding-top:14px;padding-bottom:14px}
+.logo{display:flex;align-items:center;gap:12px;text-decoration:none}
+.logo-mark{width:52px;height:52px;border-radius:50%;background:var(--sky);display:flex;align-items:center;justify-content:center}
+.logo b{font-family:'Unbounded',sans-serif;font-size:26px;display:block;line-height:1.1}
+.logo small{font-size:12px;font-weight:600;color:var(--muted)}
+nav{display:flex;flex-wrap:wrap;gap:28px;font-weight:600}
+nav a{text-decoration:none}
+.top-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.lang-switch{display:inline-flex;border:1.5px solid var(--ink);border-radius:999px;overflow:hidden;background:#fff}
+.lang-switch button{font:700 14px 'Manrope',system-ui,sans-serif;color:var(--ink);background:transparent;border:0;padding:0 14px;min-height:44px;min-width:56px;cursor:pointer}
+.lang-switch button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.lang-switch button:focus-visible{outline:3px solid var(--sky);outline-offset:-3px}
+/* hero */
+.hero{display:flex;flex-wrap:wrap;align-items:center;gap:48px;padding-top:72px;padding-bottom:64px}
+.hero-text{flex:1 1 420px;display:flex;flex-direction:column;gap:24px}
+.badge{align-self:flex-start;background:var(--sky-l);color:#0F4F6B;font-weight:700;font-size:14px;padding:8px 14px;border-radius:999px}
+.hero h1{font-size:54px;line-height:1.1;letter-spacing:-.5px}
+.hero p{margin:0;font-size:20px;line-height:1.55;color:var(--muted);max-width:540px}
+.facts{display:flex;flex-wrap:wrap;gap:24px;font-size:15px;font-weight:600;color:var(--muted)}
+.facts span{display:flex;align-items:center;gap:8px}
+.hero-img{flex:1 1 420px;height:560px;border-radius:32px;overflow:hidden;background:#BFE5F2}
+.hero-img img{width:100%;height:100%;object-fit:cover;object-position:center 30%}
+/* catalog */
+.age{flex:1 1 300px;text-decoration:none;border-radius:24px;padding:28px;display:flex;flex-direction:column;justify-content:flex-end;gap:8px;min-height:150px}
+.age b{font-family:'Unbounded',sans-serif;font-size:26px}
+.age span{font-weight:600}
+.age-0{background:var(--sky-l)}.age-0 span{color:#0F4F6B}
+.age-1{background:var(--sun)}.age-1 span{color:#5C5330}
+.age-2{background:var(--ink);color:#fff}.age-2 b{color:#fff}.age-2 span{color:#C9E9F5}
+.cat{flex:1 1 300px;text-decoration:none;background:#fff;border-radius:24px;overflow:hidden;border:1px solid var(--line);display:flex;flex-direction:column}
+.cat img,.cat .ph{height:240px;width:100%;object-fit:cover;object-position:center 25%}
+.ph{background:var(--sky-l);display:flex;align-items:center;justify-content:center;color:#0F4F6B;font-size:14px;font-weight:600;text-align:center;padding:16px}
+.cat-name{padding:20px;display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:19px}
+/* products */
+.prod{flex:1 1 240px;display:flex;flex-direction:column;gap:12px}
+.prod img,.prod .ph{height:360px;width:100%;border-radius:20px;object-fit:cover;object-position:center 20%}
+.prod-name{font-weight:600;font-size:17px}
+.prod-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:auto}
+.price{font-family:'Unbounded',sans-serif;font-weight:700;font-size:18px}
+.price-ask{font-size:14px;font-weight:600;color:var(--muted)}
+.order-btn{font-weight:700;font-size:15px;padding:10px 16px;border-radius:999px;background:var(--sky-l);text-decoration:none;min-height:44px;display:inline-flex;align-items:center;white-space:nowrap}
+/* steps */
+.steps{background:var(--ink);color:#fff;border-radius:32px;padding:56px 48px;display:flex;flex-direction:column;gap:36px}
+.step{flex:1 1 240px;display:flex;flex-direction:column;gap:12px}
+.step i{font-style:normal;width:48px;height:48px;border-radius:50%;color:var(--ink);font-family:'Unbounded',sans-serif;font-weight:700;font-size:20px;display:flex;align-items:center;justify-content:center}
+.step b{font-size:20px}
+.step span{font-size:16px;line-height:1.5;color:#C9D6E6}
+.dot-0{background:var(--sky)}.dot-1{background:var(--sun)}.dot-2{background:var(--peach)}.dot-3{background:var(--mint)}
+/* reviews */
+.rating{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-weight:700}
+.rev{flex:1 1 300px;margin:0;background:#fff;border:1px solid var(--line);border-radius:24px;padding:28px;display:flex;flex-direction:column;gap:20px}
+.rev blockquote{margin:0;font-size:17px;line-height:1.55}
+.rev figcaption{margin-top:auto;display:flex;align-items:center;gap:12px}
+.ava{width:44px;height:44px;border-radius:50%;background:var(--sky-l);color:#0F4F6B;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+/* gallery */
+.ig{flex:1 1 160px;aspect-ratio:4/5;border-radius:16px;overflow:hidden;display:block}
+.ig img{width:100%;height:100%;object-fit:cover}
+/* contacts */
+.contacts{display:flex;flex-wrap:wrap;gap:32px;padding-bottom:72px}
+.c-left{flex:1 1 360px;display:flex;flex-direction:column;gap:24px}
+.c-item{display:flex;flex-direction:column;gap:6px}
+.c-item small{font-size:14px;font-weight:700;color:var(--muted)}
+.c-item span,.c-item a{font-size:19px;font-weight:600;text-decoration:none}
+.map{flex:1 1 420px;border-radius:28px;background:var(--sky-l);display:flex;flex-direction:column;overflow:hidden}
+.map img{height:240px;width:100%;object-fit:cover}
+.map-body{display:flex;flex-direction:column;align-items:center;gap:16px;color:#0F4F6B;padding:28px;text-align:center}
+.pin{width:72px;height:72px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;color:var(--accent)}
+footer{background:#fff;border-top:1px solid var(--line)}
+.foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;font-size:14px;color:var(--muted);padding-top:28px;padding-bottom:28px}
+@media (max-width:640px){.hero h1{font-size:36px}h2.h{font-size:28px}.hero-img{height:420px}.steps{padding:36px 24px}.hero{padding-top:40px}}
 </style>
 </head>
 <body>
-<div style="font-family: 'Manrope', system-ui, sans-serif; color: #0F2A44; background: #F5FBFD; width: 100%;">
 
-<header style="background: #FFFFFF; border-bottom: 1px solid #DCEEF5;">
-<div style="max-width: 1200px; margin: 0 auto; padding: 14px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px;">
-<a href="#top" style="display: flex; align-items: center; gap: 12px; text-decoration: none;">
-<span style="width: 52px; height: 52px; border-radius: 50%; background: #8ED0E8; display: flex; align-items: center; justify-content: center;">
-<svg width="34" height="34" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M5 29c0-8 8.5-14 19-14s16 6 16 12c0 3 2.5 4 5 2.5-.5 4.5-4 7.5-9 7.5H16C9.5 37 5 33.5 5 29z" fill="#FFFFFF"></path><circle cx="15" cy="26" r="2" fill="#8ED0E8"></circle><path d="M24 15c0-4-3-6.5-6-7.5M24 15c0-4 3-6.5 6-7.5" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"></path></svg>
-</span>
-<span style="display: flex; flex-direction: column; line-height: 1.1;">
-<span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 26px; color: #0F2A44;">Кит</span>
-<span style="font-size: 12px; font-weight: 600; color: #3E5068;">балалар киімі · детская одежда</span>
-</span>
+<header>
+<div class="wrap top">
+<a href="#top" class="logo">
+<span class="logo-mark"><svg width="34" height="34" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M5 29c0-8 8.5-14 19-14s16 6 16 12c0 3 2.5 4 5 2.5-.5 4.5-4 7.5-9 7.5H16C9.5 37 5 33.5 5 29z" fill="#FFFFFF"></path><circle cx="15" cy="26" r="2" fill="#8ED0E8"></circle><path d="M24 15c0-4-3-6.5-6-7.5M24 15c0-4 3-6.5 6-7.5" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"></path></svg></span>
+<span><b>Кит</b><small>балалар киімі · детская одежда</small></span>
 </a>
-<nav aria-label="Основное меню" style="display: flex; flex-wrap: wrap; gap: 28px; font-weight: 600; font-size: 16px;">
-<a href="#catalog" style="text-decoration: none;">Каталог</a>
-<a href="#new" style="text-decoration: none;">Новинки</a>
-<a href="#reviews" style="text-decoration: none;">Отзывы</a>
-<a href="#order" style="text-decoration: none;">Доставка</a>
-<a href="#contacts" style="text-decoration: none;">Контакты</a>
+<nav aria-label="Основное меню" data-kk-label="Негізгі мәзір">
+<a href="#catalog" data-kk="Каталог">Каталог</a>
+<a href="#new" data-kk="Жаңа түсімдер">Новинки</a>
+<a href="#reviews" data-kk="Пікірлер">Отзывы</a>
+<a href="#order" data-kk="Жеткізу">Доставка</a>
+<a href="#contacts" data-kk="Байланыс">Контакты</a>
 </nav>
-<div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-<div class="lang-switch" role="group" aria-label="Язык сайта">
+<div class="top-right">
+<div class="lang-switch" role="group" aria-label="Язык сайта" data-kk-label="Сайт тілі">
 <button type="button" data-lang="ru" aria-pressed="true">РУС</button><button type="button" data-lang="kk" aria-pressed="false">ҚАЗ</button>
 </div>
-<a href="https://wa.me/77024405009" style="display: inline-flex; align-items: center; gap: 8px; background: #17739A; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 15px; padding: 12px 20px; border-radius: 999px; min-height: 44px; box-sizing: border-box;">
+<a href="{{ wa }}" class="btn btn-main" style="font-size:15px;padding:12px 20px">
 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"></path></svg>
-WhatsApp
-</a>
+WhatsApp</a>
 </div>
 </div>
 </header>
 
-<section id="top" style="max-width: 1200px; margin: 0 auto; padding: 72px 24px 64px; display: flex; flex-wrap: wrap; align-items: center; gap: 48px;">
-<div style="flex: 1 1 420px; display: flex; flex-direction: column; gap: 24px;">
-<span style="align-self: flex-start; background: #DFF2F9; color: #0F4F6B; font-weight: 700; font-size: 14px; padding: 8px 14px; border-radius: 999px;">Детская и подростковая одежда · Астана</span>
-<h1 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 54px; line-height: 1.1; letter-spacing: -0.5px;">Одежда для детей и подростков</h1>
-<p style="margin: 0; font-size: 20px; line-height: 1.55; color: #3E5068; max-width: 540px;">От малышей до подростков: размеры от 73 до 170 см. Подберём размер в WhatsApp и доставим по всему Казахстану.</p>
-<div style="display: flex; flex-wrap: wrap; gap: 12px;">
-<a href="#catalog" style="display: inline-flex; align-items: center; background: #17739A; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 17px; padding: 16px 28px; border-radius: 999px; min-height: 44px; box-sizing: border-box;">Смотреть каталог</a>
-<a href="https://wa.me/77024405009" style="display: inline-flex; align-items: center; gap: 8px; background: #FFFFFF; color: #0F2A44; text-decoration: none; font-weight: 700; font-size: 17px; padding: 16px 28px; border-radius: 999px; border: 2px solid #0F2A44; min-height: 44px; box-sizing: border-box;">Подобрать размер</a>
+<main>
+<section id="top" class="wrap hero">
+<div class="hero-text">
+<span class="badge" data-kk="{{ t.hero_badge_kk | default: t.hero_badge_ru | escape }}">{{ t.hero_badge_ru | escape }}</span>
+<h1 class="h" data-kk="{{ t.hero_title_kk | default: t.hero_title_ru | escape }}">{{ t.hero_title_ru | escape }}</h1>
+<p data-kk="{{ t.hero_text_kk | default: t.hero_text_ru | escape }}">{{ t.hero_text_ru | escape }}</p>
+<div class="grid" style="gap:12px">
+<a href="#catalog" class="btn btn-main" style="font-size:17px;padding:16px 28px" data-kk="Каталогты қарау">Смотреть каталог</a>
+<a href="{{ wa }}" class="btn btn-line" style="font-size:17px;padding:16px 28px" data-kk="Өлшем таңдау">Подобрать размер</a>
 </div>
-<div style="display: flex; flex-wrap: wrap; gap: 24px; font-size: 15px; font-weight: 600; color: #3E5068;">
-<span style="display: flex; align-items: center; gap: 8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"></path><circle cx="12" cy="9.5" r="2.5"></circle></svg>Женис, 26А · 10:00–20:00</span>
-<span style="display: flex; align-items: center; gap: 8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Доставка по Казахстану</span>
+<div class="facts">
+<span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"></path><circle cx="12" cy="9.5" r="2.5"></circle></svg><span data-kk="{{ c.address_short_kk | default: c.address_short_ru | append: ' · ' | append: c.hours | escape }}">{{ c.address_short_ru | append: " · " | append: c.hours | escape }}</span></span>
+<span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg><span data-kk="Қазақстан бойынша жеткізу">Доставка по Казахстану</span></span>
 </div>
 </div>
-<div style="flex: 1 1 420px; height: 560px; border-radius: 32px; overflow: hidden; background: #BFE5F2; position: relative">
-<img src="images/kit-hero.jpg" alt="Дети в куртках и стильных образах из магазина «Кит»" style="width: 100%; height: 100%; object-fit: cover; object-position: center 30%; display: block;">
-</div>
-</section>
-
-<section id="catalog" style="max-width: 1200px; margin: 0 auto; padding: 48px 24px;">
-<h2 style="margin: 0 0 12px; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 36px;">Каталог</h2>
-<p style="margin: 0 0 32px; font-size: 18px; color: #3E5068;">Выберите раздел — покажем всё, что есть в наличии</p>
-<div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px;">
-<a href="#new" style="flex: 1 1 300px; text-decoration: none; background: #DFF2F9; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 8px; min-height: 150px; box-sizing: border-box; justify-content: flex-end;">
-<span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 26px; color: #0F2A44;">Малышам</span>
-<span style="font-weight: 600; font-size: 16px; color: #0F4F6B;">рост 73–80 см →</span>
-</a>
-<a href="#new" style="flex: 1 1 300px; text-decoration: none; background: #FFF4C7; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 8px; min-height: 150px; box-sizing: border-box; justify-content: flex-end;">
-<span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 26px; color: #0F2A44;">Детям</span>
-<span style="font-weight: 600; font-size: 16px; color: #5C5330;">рост 90–130 см →</span>
-</a>
-<a href="#new" style="flex: 1 1 300px; text-decoration: none; background: #0F2A44; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 8px; min-height: 150px; box-sizing: border-box; justify-content: flex-end;">
-<span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 26px; color: #FFFFFF;">Подросткам</span>
-<span style="font-weight: 600; font-size: 16px; color: #C9E9F5;">рост 110–170 см →</span>
-</a>
-</div>
-<div style="display: flex; flex-wrap: wrap; gap: 20px;">
-<a href="#new" style="flex: 1 1 300px; text-decoration: none; background: #FFFFFF; border-radius: 24px; overflow: hidden; border: 1px solid #DCEEF5; display: flex; flex-direction: column;">
-<img loading="lazy" src="images/kit-winter.jpg" alt="Зимние куртки" style="height: 240px; width: 100%; object-fit: cover; object-position: center 25%; display: block;">
-<div style="padding: 20px; display: flex; justify-content: space-between; align-items: center;"><span style="font-weight: 700; font-size: 19px; color: #0F2A44;">Зимние куртки</span><span style="color: #3E5068; font-size: 22px;" aria-hidden="true">→</span></div>
-</a>
-<a href="#new" style="flex: 1 1 300px; text-decoration: none; background: #FFFFFF; border-radius: 24px; overflow: hidden; border: 1px solid #DCEEF5; display: flex; flex-direction: column;">
-<img loading="lazy" src="images/kit-autumn.jpg" alt="Осенние куртки" style="height: 240px; width: 100%; object-fit: cover; object-position: center 25%; display: block;">
-<div style="padding: 20px; display: flex; justify-content: space-between; align-items: center;"><span style="font-weight: 700; font-size: 19px; color: #0F2A44;">Осенние куртки</span><span style="color: #3E5068; font-size: 22px;" aria-hidden="true">→</span></div>
-</a>
-<a href="#new" style="flex: 1 1 300px; text-decoration: none; background: #FFFFFF; border-radius: 24px; overflow: hidden; border: 1px solid #DCEEF5; display: flex; flex-direction: column;">
-<img loading="lazy" src="images/kit-hats.jpg" alt="Шапки" style="height: 240px; width: 100%; object-fit: cover; object-position: center 25%; display: block;">
-<div style="padding: 20px; display: flex; justify-content: space-between; align-items: center;"><span style="font-weight: 700; font-size: 19px; color: #0F2A44;">Шапки</span><span style="color: #3E5068; font-size: 22px;" aria-hidden="true">→</span></div>
-</a>
-<a href="#new" style="flex: 1 1 300px; text-decoration: none; background: #FFFFFF; border-radius: 24px; overflow: hidden; border: 1px solid #DCEEF5; display: flex; flex-direction: column;">
-<img loading="lazy" src="images/kit-school.jpg" alt="Школа" style="height: 240px; width: 100%; object-fit: cover; object-position: center 25%; display: block;">
-<div style="padding: 20px; display: flex; justify-content: space-between; align-items: center;"><span style="font-weight: 700; font-size: 19px; color: #0F2A44;">Школа</span><span style="color: #3E5068; font-size: 22px;" aria-hidden="true">→</span></div>
-</a>
-<a href="#new" style="flex: 1 1 300px; text-decoration: none; background: #FFFFFF; border-radius: 24px; overflow: hidden; border: 1px solid #DCEEF5; display: flex; flex-direction: column;">
-<div style="height: 240px; background: #DFF2F9; display: flex; align-items: center; justify-content: center; color: #0F4F6B; font-size: 14px; font-weight: 600;">Фото категории (нет летних фото)</div>
-<div style="padding: 20px; display: flex; justify-content: space-between; align-items: center;"><span style="font-weight: 700; font-size: 19px; color: #0F2A44;">Лето</span><span style="color: #3E5068; font-size: 22px;" aria-hidden="true">→</span></div>
-</a>
+<div class="hero-img">
+{%- if t.hero_image and t.hero_image != "" %}
+<img src="{{ t.hero_image | relative_url }}" alt="Дети в одежде из магазина «Кит»" data-kk-alt="«Кит» дүкенінің киіміндегі балалар">
+{%- endif %}
 </div>
 </section>
 
-<section id="new" style="max-width: 1200px; margin: 0 auto; padding: 48px 24px;">
-<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 32px;">
-<h2 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 36px;">Новинки</h2>
-<a href="https://instagram.com/kids_clothes_kit_" style="font-weight: 700; font-size: 16px;">Все новинки в Instagram →</a>
+<section id="catalog" class="wrap">
+<h2 class="h" style="margin-bottom:12px" data-kk="Каталог">Каталог</h2>
+<p class="muted" style="margin:0 0 32px;font-size:18px" data-kk="{{ t.catalog_text_kk | default: t.catalog_text_ru | escape }}">{{ t.catalog_text_ru | escape }}</p>
+<div class="grid" style="margin-bottom:20px">
+{%- for a in site.data.ages.items %}
+{%- assign mod = forloop.index0 | modulo: 3 %}
+<a href="#new" class="age age-{{ mod }}"><b data-kk="{{ a.name_kk | default: a.name_ru | escape }}">{{ a.name_ru | escape }}</b><span data-kk="бойы {{ a.sizes | escape }} см →">рост {{ a.sizes | escape }} см →</span></a>
+{%- endfor %}
 </div>
-<div style="display: flex; flex-wrap: wrap; gap: 20px;">
-<div style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 12px;">
-<img loading="lazy" src="images/kit-new1.jpg" alt="Бомбер с капюшоном" style="height: 360px; width: 100%; border-radius: 20px; object-fit: cover; object-position: center 20%; display: block;">
-<div style="font-weight: 600; font-size: 17px;">Бомбер с капюшоном</div>
-<div style="font-size: 14px; color: #3E5068;">[Рост, см]</div>
-<div style="display: flex; justify-content: space-between; align-items: center;"><span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 18px;">[Цена] ₸</span><a href="https://wa.me/77024405009" style="font-weight: 700; font-size: 15px; padding: 10px 16px; border-radius: 999px; background: #DFF2F9; text-decoration: none; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center;">Заказать</a></div>
-</div>
-<div style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 12px;">
-<img loading="lazy" src="images/kit-new2.jpg" alt="Свитшот BLINKS и юбка в клетку" style="height: 360px; width: 100%; border-radius: 20px; object-fit: cover; object-position: center 20%; display: block;">
-<div style="font-weight: 600; font-size: 17px;">Свитшот BLINKS и юбка в клетку</div>
-<div style="font-size: 14px; color: #3E5068;">[Рост, см]</div>
-<div style="display: flex; justify-content: space-between; align-items: center;"><span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 18px;">[Цена] ₸</span><a href="https://wa.me/77024405009" style="font-weight: 700; font-size: 15px; padding: 10px 16px; border-radius: 999px; background: #DFF2F9; text-decoration: none; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center;">Заказать</a></div>
-</div>
-<div style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 12px;">
-<img loading="lazy" src="images/kit-new3.jpg" alt="Свитшот и спортивные брюки" style="height: 360px; width: 100%; border-radius: 20px; object-fit: cover; object-position: center 20%; display: block;">
-<div style="font-weight: 600; font-size: 17px;">Свитшот и спортивные брюки</div>
-<div style="font-size: 14px; color: #3E5068;">[Рост, см]</div>
-<div style="display: flex; justify-content: space-between; align-items: center;"><span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 18px;">[Цена] ₸</span><a href="https://wa.me/77024405009" style="font-weight: 700; font-size: 15px; padding: 10px 16px; border-radius: 999px; background: #DFF2F9; text-decoration: none; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center;">Заказать</a></div>
-</div>
-<div style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 12px;">
-<img loading="lazy" src="images/kit-new4.jpg" alt="Брюки карго" style="height: 360px; width: 100%; border-radius: 20px; object-fit: cover; object-position: center 20%; display: block;">
-<div style="font-weight: 600; font-size: 17px;">Брюки карго</div>
-<div style="font-size: 14px; color: #3E5068;">[Рост, см]</div>
-<div style="display: flex; justify-content: space-between; align-items: center;"><span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 18px;">[Цена] ₸</span><a href="https://wa.me/77024405009" style="font-weight: 700; font-size: 15px; padding: 10px 16px; border-radius: 999px; background: #DFF2F9; text-decoration: none; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center;">Заказать</a></div>
-</div>
+<div class="grid">
+{%- for cat in site.data.categories.items %}{% unless cat.show == false %}
+<a href="#new" class="cat">
+{%- if cat.image and cat.image != "" %}
+<img src="{{ cat.image | relative_url }}" alt="{{ cat.name_ru | escape }}" data-kk-alt="{{ cat.name_kk | default: cat.name_ru | escape }}" loading="lazy">
+{%- else %}
+<div class="ph" data-kk="Фото жақында">Фото скоро</div>
+{%- endif %}
+<div class="cat-name"><span data-kk="{{ cat.name_kk | default: cat.name_ru | escape }}">{{ cat.name_ru | escape }}</span><span class="muted" aria-hidden="true">→</span></div>
+</a>
+{%- endunless %}{% endfor %}
 </div>
 </section>
 
-<section id="order" style="max-width: 1200px; margin: 48px auto; padding: 0 24px;">
-<div style="background: #0F2A44; color: #FFFFFF; border-radius: 32px; padding: 56px 48px; display: flex; flex-direction: column; gap: 36px;">
-<h2 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 36px;">Как заказать</h2>
-<div style="display: flex; flex-wrap: wrap; gap: 24px;">
-<div style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 12px;">
-<span style="width: 48px; height: 48px; border-radius: 50%; background: #8ED0E8; color: #0F2A44; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 20px; display: flex; align-items: center; justify-content: center;">1</span>
-<span style="font-weight: 700; font-size: 20px;">Выберите вещь</span>
-<span style="font-size: 16px; line-height: 1.5; color: #C9D6E6;">На сайте или в нашем Instagram. Сохраните фото понравившейся модели.</span>
+<section id="new" class="wrap">
+<div class="head">
+<h2 class="h" data-kk="Жаңа түсімдер">Новинки</h2>
+<a href="{{ ig }}" style="font-weight:700" data-kk="Барлық жаңа түсімдер Instagram-да →">Все новинки в Instagram →</a>
 </div>
-<div style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 12px;">
-<span style="width: 48px; height: 48px; border-radius: 50%; background: #FFF4C7; color: #0F2A44; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 20px; display: flex; align-items: center; justify-content: center;">2</span>
-<span style="font-weight: 700; font-size: 20px;">Напишите в WhatsApp</span>
-<span style="font-size: 16px; line-height: 1.5; color: #C9D6E6;">Подскажем размер по росту ребёнка или подростка и проверим наличие.</span>
+<div class="grid">
+{%- for p in site.data.products.items %}{% unless p.show == false %}
+{%- assign msg = "Здравствуйте! Хочу заказать: " | append: p.name_ru | cgi_escape | replace: "+", "%20" %}
+<div class="prod">
+{%- if p.image and p.image != "" %}
+<img src="{{ p.image | relative_url }}" alt="{{ p.name_ru | escape }}" data-kk-alt="{{ p.name_kk | default: p.name_ru | escape }}" loading="lazy">
+{%- else %}
+<div class="ph" data-kk="Фото жақында">Фото скоро</div>
+{%- endif %}
+<div class="prod-name" data-kk="{{ p.name_kk | default: p.name_ru | escape }}">{{ p.name_ru | escape }}</div>
+{%- if p.sizes and p.sizes != "" %}
+<div class="muted" style="font-size:14px" data-kk="Бойы: {{ p.sizes | escape }}">Рост: {{ p.sizes | escape }}</div>
+{%- endif %}
+<div class="prod-row">
+{%- if p.price and p.price != "" %}
+<span class="price">{{ p.price | escape }} ₸</span>
+{%- else %}
+<span class="price-ask" data-kk="Бағасын WhatsApp-та сұраңыз">Цену уточняйте в WhatsApp</span>
+{%- endif %}
+<a href="{{ wa }}?text={{ msg }}" class="order-btn" data-kk="Тапсырыс беру">Заказать</a>
 </div>
-<div style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 12px;">
-<span style="width: 48px; height: 48px; border-radius: 50%; background: #FFE3D6; color: #0F2A44; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 20px; display: flex; align-items: center; justify-content: center;">3</span>
-<span style="font-weight: 700; font-size: 20px;">Получите заказ</span>
-<span style="font-size: 16px; line-height: 1.5; color: #C9D6E6;">Доставим по всему Казахстану или приходите в магазин на Женис, 26А.</span>
 </div>
-</div>
-<a href="https://wa.me/77024405009" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; background: #FFFFFF; color: #0F2A44; text-decoration: none; font-weight: 700; font-size: 17px; padding: 16px 28px; border-radius: 999px; min-height: 44px; box-sizing: border-box;">Написать в WhatsApp</a>
-</div>
-</section>
-
-<section id="reviews" style="max-width: 1200px; margin: 0 auto; padding: 48px 24px;">
-<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 32px;">
-<div style="display: flex; flex-direction: column; gap: 12px;">
-<h2 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 36px;">Отзывы покупателей</h2>
-<span style="display: inline-flex; align-items: center; gap: 10px; font-size: 18px; color: #3E5068;"><span style="display: inline-flex; align-items: center; gap: 6px; background: #FFFFFF; border: 1px solid #DCEEF5; border-radius: 999px; padding: 6px 14px; font-weight: 700; color: #0F2A44;"><svg width="16" height="16" viewBox="0 0 24 24" fill="#E8A317" stroke="#E8A317" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"></path></svg>4,7</span>60 оценок и 37 отзывов в 2ГИС</span>
-</div>
-<a href="https://2gis.kz/astana/firm/70000001038691932/tab/reviews" style="font-weight: 700; font-size: 16px;">Все отзывы в 2ГИС →</a>
-</div>
-<div style="display: flex; flex-wrap: wrap; gap: 20px;">
-<figure style="flex: 1 1 300px; margin: 0; background: #FFFFFF; border: 1px solid #DCEEF5; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box;">
-<blockquote style="margin: 0; font-size: 17px; line-height: 1.55; color: #0F2A44;">«Большой ассортимент и персонал очень приветливый и терпеливый, видно знает что продает. Я уже так привыкла к ним, даже не смотрю зимние вещи где-то еще.»</blockquote>
-<figcaption style="margin-top: auto; display: flex; align-items: center; gap: 12px;">
-<span style="width: 44px; height: 44px; border-radius: 50%; background: #DFF2F9; color: #0F4F6B; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">БР</span>
-<span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 700; font-size: 16px;">Баршагуль Р</span><span style="font-size: 14px; color: #3E5068;">12 ноября 2026 · отзыв в 2ГИС</span></span>
-</figcaption>
-</figure>
-<figure style="flex: 1 1 300px; margin: 0; background: #FFFFFF; border: 1px solid #DCEEF5; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box;">
-<blockquote style="margin: 0; font-size: 17px; line-height: 1.55; color: #0F2A44;">«Все мои сестрёнки одеваются тут. Качество одежды всегда хорошее, а консультанты всегда вежливые - никогда не откажут в просьбе!»</blockquote>
-<figcaption style="margin-top: auto; display: flex; align-items: center; gap: 12px;">
-<span style="width: 44px; height: 44px; border-radius: 50%; background: #DFF2F9; color: #0F4F6B; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">ГТ</span>
-<span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 700; font-size: 16px;">Гүлназ Тілеубаева</span><span style="font-size: 14px; color: #3E5068;">10 ноября 2026 · отзыв в 2ГИС</span></span>
-</figcaption>
-</figure>
-<figure style="flex: 1 1 300px; margin: 0; background: #FFFFFF; border: 1px solid #DCEEF5; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box;">
-<blockquote style="margin: 0; font-size: 17px; line-height: 1.55; color: #0F2A44;">«Смело могу сказать, что это самый лучший магазин в этом районе. Продавцы всегда вежливые и быстро находят нужные размеры.»</blockquote>
-<figcaption style="margin-top: auto; display: flex; align-items: center; gap: 12px;">
-<span style="width: 44px; height: 44px; border-radius: 50%; background: #DFF2F9; color: #0F4F6B; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">S</span>
-<span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 700; font-size: 16px;">Saniyusha</span><span style="font-size: 14px; color: #3E5068;">23 сентября 2026 · отзыв в 2ГИС</span></span>
-</figcaption>
-</figure>
-<figure style="flex: 1 1 300px; margin: 0; background: #FFFFFF; border: 1px solid #DCEEF5; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box;">
-<blockquote style="margin: 0; font-size: 17px; line-height: 1.55; color: #0F2A44;">«Мектепке деген киімдердің біраз әдемі үлгілері бар, ешқайда бармай-ақ барлығын бір жерден алып кеткен қандай жақсы. Киімдер де сапалы.»</blockquote>
-<figcaption style="margin-top: auto; display: flex; align-items: center; gap: 12px;">
-<span style="width: 44px; height: 44px; border-radius: 50%; background: #DFF2F9; color: #0F4F6B; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">АС</span>
-<span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 700; font-size: 16px;">Айгерим Сулейменова</span><span style="font-size: 14px; color: #3E5068;">26 июля 2026 · отзыв в 2ГИС</span></span>
-</figcaption>
-</figure>
-<figure style="flex: 1 1 300px; margin: 0; background: #FFFFFF; border: 1px solid #DCEEF5; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box;">
-<blockquote style="margin: 0; font-size: 17px; line-height: 1.55; color: #0F2A44;">«Несмотря на то, что магазин довольно маленький, выбор очень большой. Качество всегда радует. … Всем рекомендую))»</blockquote>
-<figcaption style="margin-top: auto; display: flex; align-items: center; gap: 12px;">
-<span style="width: 44px; height: 44px; border-radius: 50%; background: #DFF2F9; color: #0F4F6B; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">ҚӨ</span>
-<span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 700; font-size: 16px;">Қызғалдақ Өмірзақова</span><span style="font-size: 14px; color: #3E5068;">17 сентября 2026 · отзыв в 2ГИС</span></span>
-</figcaption>
-</figure>
-<figure style="flex: 1 1 300px; margin: 0; background: #FFFFFF; border: 1px solid #DCEEF5; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box;">
-<blockquote style="margin: 0; font-size: 17px; line-height: 1.55; color: #0F2A44;">«Сегодня купили сыну зимний костюм в вашем магазине. Остались очень довольны качеством костюма.»</blockquote>
-<figcaption style="margin-top: auto; display: flex; align-items: center; gap: 12px;">
-<span style="width: 44px; height: 44px; border-radius: 50%; background: #DFF2F9; color: #0F4F6B; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">ZO</span>
-<span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 700; font-size: 16px;">Zhanna. O</span><span style="font-size: 14px; color: #3E5068;">15 ноября 2025 · отзыв в 2ГИС</span></span>
-</figcaption>
-</figure>
+{%- endunless %}{% endfor %}
 </div>
 </section>
 
-<section style="max-width: 1200px; margin: 0 auto; padding: 48px 24px;">
-<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 32px;">
-<div style="display: flex; flex-direction: column; gap: 8px;">
-<h2 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 36px;">Мы в Instagram</h2>
-<span style="font-size: 18px; color: #3E5068;">Более 24 тысяч подписчиков, новинки и видео каждый день</span>
+<section id="order" class="wrap">
+<div class="steps">
+<h2 class="h" data-kk="Қалай тапсырыс беруге болады">Как заказать</h2>
+<div class="grid" style="gap:24px">
+{%- for s in t.steps %}
+{%- assign mod = forloop.index0 | modulo: 4 %}
+<div class="step">
+<i class="dot-{{ mod }}">{{ forloop.index }}</i>
+<b data-kk="{{ s.title_kk | default: s.title_ru | escape }}">{{ s.title_ru | escape }}</b>
+<span data-kk="{{ s.text_kk | default: s.text_ru | escape }}">{{ s.text_ru | escape }}</span>
 </div>
-<a href="https://instagram.com/kids_clothes_kit_" style="display: inline-flex; align-items: center; gap: 8px; background: #0F2A44; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 16px; padding: 14px 24px; border-radius: 999px; min-height: 44px; box-sizing: border-box;">
+{%- endfor %}
+</div>
+<a href="{{ wa }}" class="btn" style="align-self:flex-start;background:#fff;color:var(--ink);font-size:17px;padding:16px 28px" data-kk="WhatsApp-қа жазу">Написать в WhatsApp</a>
+</div>
+</section>
+
+<section id="reviews" class="wrap">
+<div class="head">
+<div style="display:flex;flex-direction:column;gap:12px">
+<h2 class="h" data-kk="Сатып алушылардың пікірлері">Отзывы покупателей</h2>
+<span class="muted" style="display:inline-flex;align-items:center;gap:10px;font-size:18px">
+<span class="rating"><svg width="16" height="16" viewBox="0 0 24 24" fill="#E8A317" stroke="#E8A317" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"></path></svg>{{ c.rating | escape }}</span>
+<span data-kk="2ГИС-те {{ c.ratings_count | escape }} баға және {{ c.reviews_count | escape }} пікір">{{ c.ratings_count | escape }} оценок и {{ c.reviews_count | escape }} отзывов в 2ГИС</span>
+</span>
+</div>
+<a href="{{ c.twogis_url }}/tab/reviews" style="font-weight:700" data-kk="Барлық пікірлер 2ГИС-те →">Все отзывы в 2ГИС →</a>
+</div>
+<div class="grid">
+{%- for r in site.data.reviews.items %}
+<figure class="rev">
+<blockquote>«{{ r.text | escape }}»</blockquote>
+<figcaption>
+<span class="ava" aria-hidden="true">{{ r.name | slice: 0 | upcase }}</span>
+<span style="display:flex;flex-direction:column;gap:2px"><b>{{ r.name | escape }}</b><span class="muted" style="font-size:14px" data-kk="{{ r.date_kk | default: r.date_ru | escape }} · 2ГИС-тегі пікір">{{ r.date_ru | escape }} · отзыв в 2ГИС</span></span>
+</figcaption>
+</figure>
+{%- endfor %}
+</div>
+</section>
+
+<section class="wrap">
+<div class="head">
+<div style="display:flex;flex-direction:column;gap:8px">
+<h2 class="h" data-kk="Біз Instagram-дамыз">Мы в Instagram</h2>
+<span class="muted" style="font-size:18px" data-kk="{{ t.instagram_text_kk | default: t.instagram_text_ru | escape }}">{{ t.instagram_text_ru | escape }}</span>
+</div>
+<a href="{{ ig }}" class="btn btn-dark">
 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="0.8" fill="currentColor"></circle></svg>
-@kids_clothes_kit_</a>
+@{{ c.instagram | escape }}</a>
 </div>
-<div style="display: flex; flex-wrap: wrap; gap: 12px;">
-<a href="https://instagram.com/kids_clothes_kit_" style="flex: 1 1 160px; aspect-ratio: 4 / 5; border-radius: 16px; overflow: hidden; display: block;"><img loading="lazy" src="images/kit-ig1.jpg" alt="Образ из лукбука" style="width: 100%; height: 100%; object-fit: cover; display: block;"></a>
-<a href="https://instagram.com/kids_clothes_kit_" style="flex: 1 1 160px; aspect-ratio: 4 / 5; border-radius: 16px; overflow: hidden; display: block;"><img loading="lazy" src="images/kit-ig2.jpg" alt="Образ из лукбука" style="width: 100%; height: 100%; object-fit: cover; display: block;"></a>
-<a href="https://instagram.com/kids_clothes_kit_" style="flex: 1 1 160px; aspect-ratio: 4 / 5; border-radius: 16px; overflow: hidden; display: block;"><img loading="lazy" src="images/kit-ig3.jpg" alt="Образ из лукбука" style="width: 100%; height: 100%; object-fit: cover; display: block;"></a>
-<a href="https://instagram.com/kids_clothes_kit_" style="flex: 1 1 160px; aspect-ratio: 4 / 5; border-radius: 16px; overflow: hidden; display: block;"><img loading="lazy" src="images/kit-ig4.jpg" alt="Куртка в магазине" style="width: 100%; height: 100%; object-fit: cover; display: block;"></a>
-<a href="https://instagram.com/kids_clothes_kit_" style="flex: 1 1 160px; aspect-ratio: 4 / 5; border-radius: 16px; overflow: hidden; display: block;"><img loading="lazy" src="images/kit-ig5.jpg" alt="Вешалки в магазине «Кит»" style="width: 100%; height: 100%; object-fit: cover; display: block;"></a>
+<div class="grid" style="gap:12px">
+{%- for g in site.data.gallery.items %}{% if g.image and g.image != "" %}
+<a href="{{ ig }}" class="ig"><img src="{{ g.image | relative_url }}" alt="Фото из Instagram магазина «Кит»" data-kk-alt="«Кит» дүкенінің Instagram-дағы суреті" loading="lazy"></a>
+{%- endif %}{% endfor %}
 </div>
 </section>
 
-<section id="contacts" style="max-width: 1200px; margin: 0 auto; padding: 48px 24px 72px; display: flex; flex-wrap: wrap; gap: 32px;">
-<div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 24px;">
-<h2 style="margin: 0; font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 36px;">Контакты</h2>
-<div style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 14px; font-weight: 700; color: #3E5068;">Адрес магазина</span><span style="font-size: 19px; font-weight: 600;">Астана, проспект Женис, 26А</span></div>
-<div style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 14px; font-weight: 700; color: #3E5068;">Часы работы</span><span style="font-size: 19px; font-weight: 600;">10:00–20:00</span></div>
-<div style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 14px; font-weight: 700; color: #3E5068;">WhatsApp</span><a href="https://wa.me/77024405009" style="font-size: 19px; font-weight: 600; text-decoration: none;">+7 702 440 50 09</a></div>
-<div style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 14px; font-weight: 700; color: #3E5068;">Доставка</span><span style="font-size: 19px; font-weight: 600;">По всему Казахстану</span></div>
-<div style="display: flex; flex-wrap: wrap; gap: 12px;">
-<a href="https://wa.me/77024405009" style="display: inline-flex; align-items: center; background: #17739A; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 16px; padding: 14px 24px; border-radius: 999px; min-height: 44px; box-sizing: border-box;">Написать в WhatsApp</a>
-<a href="https://instagram.com/kids_clothes_kit_" style="display: inline-flex; align-items: center; background: #FFFFFF; color: #0F2A44; text-decoration: none; font-weight: 700; font-size: 16px; padding: 14px 24px; border-radius: 999px; border: 2px solid #0F2A44; min-height: 44px; box-sizing: border-box;">Instagram</a>
+<section id="contacts" class="wrap contacts">
+<div class="c-left">
+<h2 class="h" data-kk="Байланыс">Контакты</h2>
+<div class="c-item"><small data-kk="Дүкен мекенжайы">Адрес магазина</small><span data-kk="{{ c.address_kk | default: c.address_ru | escape }}">{{ c.address_ru | escape }}</span></div>
+<div class="c-item"><small data-kk="Жұмыс уақыты">Часы работы</small><span>{{ c.hours | escape }}</span></div>
+<div class="c-item"><small>WhatsApp</small><a href="{{ wa }}">{{ c.phone | escape }}</a></div>
+<div class="c-item"><small data-kk="Жеткізу">Доставка</small><span data-kk="{{ c.delivery_kk | default: c.delivery_ru | escape }}">{{ c.delivery_ru | escape }}</span></div>
+<div class="grid" style="gap:12px">
+<a href="{{ wa }}" class="btn btn-main" data-kk="WhatsApp-қа жазу">Написать в WhatsApp</a>
+<a href="{{ ig }}" class="btn btn-line">Instagram</a>
 </div>
 </div>
-<div style="flex: 1 1 420px; border-radius: 28px; background: #DFF2F9; display: flex; flex-direction: column; overflow: hidden;">
-<img loading="lazy" src="images/kit-store.jpg" alt="Наш магазин на Женис, 26А" style="width: 100%; height: 240px; object-fit: cover; display: block;">
-<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: #0F4F6B; padding: 28px; box-sizing: border-box; text-align: center;">
-<span style="width: 72px; height: 72px; border-radius: 50%; background: #FFFFFF; display: flex; align-items: center; justify-content: center; color: #17739A;"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"></path><circle cx="12" cy="9.5" r="2.5"></circle></svg></span>
-<span style="font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 22px; color: #0F2A44;">Мы на 2ГИС</span>
-<span style="font-size: 16px; font-weight: 600;">Магазин детской одежды «Кит» · проспект Женис, 26А</span>
-<span style="display: inline-flex; align-items: center; gap: 8px; background: #FFFFFF; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 15px; color: #0F2A44;"><svg width="16" height="16" viewBox="0 0 24 24" fill="#E8A317" stroke="#E8A317" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"></path></svg>4,7 · 60 оценок</span>
-<a href="https://2gis.kz/astana/firm/70000001038691932" style="display: inline-flex; align-items: center; background: #17739A; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 16px; padding: 14px 24px; border-radius: 999px; min-height: 44px; box-sizing: border-box;">Открыть в 2ГИС и построить маршрут</a>
+<div class="map">
+{%- if t.store_photo and t.store_photo != "" %}
+<img src="{{ t.store_photo | relative_url }}" alt="Наш магазин" data-kk-alt="Біздің дүкен" loading="lazy">
+{%- endif %}
+<div class="map-body">
+<span class="pin"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"></path><circle cx="12" cy="9.5" r="2.5"></circle></svg></span>
+<b class="h" style="font-size:22px;color:var(--ink)" data-kk="Біз 2ГИС-теміз">Мы на 2ГИС</b>
+<span style="font-weight:600" data-kk="«Кит» балалар киімі дүкені · {{ c.address_kk | default: c.address_ru | escape }}">Магазин детской одежды «Кит» · {{ c.address_ru | escape }}</span>
+<span class="rating"><svg width="16" height="16" viewBox="0 0 24 24" fill="#E8A317" stroke="#E8A317" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"></path></svg><span data-kk="{{ c.rating | escape }} · {{ c.ratings_count | escape }} баға">{{ c.rating | escape }} · {{ c.ratings_count | escape }} оценок</span></span>
+<a href="{{ c.twogis_url }}" class="btn btn-main" data-kk="2ГИС-те ашып, бағыт құру">Открыть в 2ГИС и построить маршрут</a>
 </div>
 </div>
 </section>
+</main>
 
-<footer style="background: #FFFFFF; border-top: 1px solid #DCEEF5;">
-<div style="max-width: 1200px; margin: 0 auto; padding: 28px 24px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; font-size: 14px; color: #3E5068;">
-<span>© 2026 «Кит» — детская и подростковая одежда, Астана</span>
-<span style="display: flex; gap: 20px;"><a href="https://wa.me/77024405009">WhatsApp</a><a href="https://instagram.com/kids_clothes_kit_">Instagram</a></span>
+<footer>
+<div class="wrap foot">
+<span data-kk="© {{ 'now' | date: '%Y' }} «Кит» — балалар мен жасөспірімдер киімі, Астана">© {{ 'now' | date: '%Y' }} «Кит» — детская и подростковая одежда, Астана</span>
+<span style="display:flex;gap:20px"><a href="{{ wa }}">WhatsApp</a><a href="{{ ig }}">Instagram</a></span>
 </div>
 </footer>
 
-</div>
 <script>
-(function(){
-var KK={"Основное меню": "Негізгі мәзір", "Каталог": "Каталог", "Новинки": "Жаңа түсімдер", "Отзывы": "Пікірлер", "Доставка": "Жеткізу", "Контакты": "Байланыс", "Детская и подростковая одежда · Астана": "Балалар мен жасөспірімдер киімі · Астана", "Одежда для детей и подростков": "Балалар мен жасөспірімдерге арналған киім", "От малышей до подростков: размеры от 73 до 170 см. Подберём размер в WhatsApp и доставим по всему Казахстану.": "Сәбилерден жасөспірімдерге дейін: бойы 73-тен 170 см-ге дейінгі өлшемдер. Өлшемді WhatsApp арқылы таңдап береміз және бүкіл Қазақстан бойынша жеткіземіз.", "Смотреть каталог": "Каталогты қарау", "Подобрать размер": "Өлшем таңдау", "Женис, 26А · 10:00–20:00": "Жеңіс, 26А · 10:00–20:00", "Доставка по Казахстану": "Қазақстан бойынша жеткізу", "Дети в куртках и стильных образах из магазина «Кит»": "«Кит» дүкенінің стильді киімдеріндегі балалар", "Выберите раздел — покажем всё, что есть в наличии": "Бөлімді таңдаңыз — қолда бар барлық тауарды көрсетеміз", "Малышам": "Сәбилерге", "рост 73–80 см →": "бойы 73–80 см →", "Детям": "Балаларға", "рост 90–130 см →": "бойы 90–130 см →", "Подросткам": "Жасөспірімдерге", "рост 110–170 см →": "бойы 110–170 см →", "Зимние куртки": "Қысқы курткалар", "Осенние куртки": "Күзгі курткалар", "Шапки": "Бас киімдер", "Школа": "Мектеп", "Фото категории (нет летних фото)": "Санат фотосы (жазғы фото әзірге жоқ)", "Лето": "Жаз", "Все новинки в Instagram →": "Барлық жаңа түсімдер Instagram-да →", "Бомбер с капюшоном": "Капюшонды бомбер", "[Рост, см]": "[Бойы, см]", "[Цена] ₸": "[Бағасы] ₸", "Заказать": "Тапсырыс беру", "Свитшот BLINKS и юбка в клетку": "BLINKS свитшоты және торлы юбка", "Свитшот и спортивные брюки": "Свитшот және спорттық шалбар", "Брюки карго": "Карго шалбар", "Как заказать": "Қалай тапсырыс беруге болады", "Выберите вещь": "Киімді таңдаңыз", "На сайте или в нашем Instagram. Сохраните фото понравившейся модели.": "Сайттан немесе Instagram парақшамыздан. Ұнаған үлгінің суретін сақтап қойыңыз.", "Напишите в WhatsApp": "WhatsApp-қа жазыңыз", "Подскажем размер по росту ребёнка или подростка и проверим наличие.": "Баланың немесе жасөспірімнің бойына қарай өлшемін айтып, тауардың бар-жоғын тексереміз.", "Получите заказ": "Тапсырысты алыңыз", "Доставим по всему Казахстану или приходите в магазин на Женис, 26А.": "Бүкіл Қазақстан бойынша жеткіземіз немесе Жеңіс, 26А мекенжайындағы дүкенімізге келіңіз.", "Написать в WhatsApp": "WhatsApp-қа жазу", "Отзывы покупателей": "Сатып алушылардың пікірлері", "60 оценок и 37 отзывов в 2ГИС": "2ГИС-те 60 баға және 37 пікір", "Все отзывы в 2ГИС →": "Барлық пікірлер 2ГИС-те →", "12 ноября 2026 · отзыв в 2ГИС": "12 қараша 2026 · 2ГИС-тегі пікір", "10 ноября 2026 · отзыв в 2ГИС": "10 қараша 2026 · 2ГИС-тегі пікір", "23 сентября 2026 · отзыв в 2ГИС": "23 қыркүйек 2026 · 2ГИС-тегі пікір", "26 июля 2026 · отзыв в 2ГИС": "26 шілде 2026 · 2ГИС-тегі пікір", "17 сентября 2026 · отзыв в 2ГИС": "17 қыркүйек 2026 · 2ГИС-тегі пікір", "15 ноября 2025 · отзыв в 2ГИС": "15 қараша 2025 · 2ГИС-тегі пікір", "Мы в Instagram": "Біз Instagram-дамыз", "Более 24 тысяч подписчиков, новинки и видео каждый день": "24 мыңнан астам жазылушы, күн сайын жаңа түсімдер мен видеолар", "Образ из лукбука": "Лукбуктағы образ", "Куртка в магазине": "Дүкендегі куртка", "Вешалки в магазине «Кит»": "«Кит» дүкеніндегі киімдер", "Адрес магазина": "Дүкен мекенжайы", "Астана, проспект Женис, 26А": "Астана, Жеңіс даңғылы, 26А", "Часы работы": "Жұмыс уақыты", "По всему Казахстану": "Бүкіл Қазақстан бойынша", "Наш магазин на Женис, 26А": "Жеңіс, 26А мекенжайындағы дүкеніміз", "Мы на 2ГИС": "Біз 2ГИС-теміз", "Магазин детской одежды «Кит» · проспект Женис, 26А": "«Кит» балалар киімі дүкені · Жеңіс даңғылы, 26А", "4,7 · 60 оценок": "4,7 · 60 баға", "Открыть в 2ГИС и построить маршрут": "2ГИС-те ашып, бағыт құру", "© 2026 «Кит» — детская и подростковая одежда, Астана": "© 2026 «Кит» — балалар мен жасөспірімдер киімі, Астана", "Язык сайта": "Сайт тілі"}, META={"title": "Кит — балалар мен жасөспірімдер киімі, Астана", "desc": "«Кит» балалар мен жасөспірімдер киімі дүкені, Астана, Жеңіс даңғылы, 26А. Бойы 73-тен 170 см-ге дейінгі өлшемдер, Қазақстан бойынша жеткізу, WhatsApp арқылы өлшем таңдау."};
-var RU_TITLE=document.title, md=document.querySelector('meta[name="description"]'), RU_DESC=md?md.content:'';
-var texts=[], attrs=[];
-var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
-  if(!n.nodeValue.trim())return NodeFilter.FILTER_REJECT;
-  var p=n.parentNode; while(p&&p!==document.body){var t=p.nodeName;if(t==='SCRIPT'||t==='STYLE'||t==='BLOCKQUOTE')return NodeFilter.FILTER_REJECT;p=p.parentNode;}
-  return NodeFilter.FILTER_ACCEPT;}});
-var n; while((n=w.nextNode())){var k=n.nodeValue.replace(/\s+/g,' ').trim(); if(KK[k]) texts.push({n:n,ru:n.nodeValue,k:k});}
-document.querySelectorAll('[alt],[aria-label]').forEach(function(el){['alt','aria-label'].forEach(function(a){var v=el.getAttribute(a); if(v&&KK[v]) attrs.push({el:el,a:a,ru:v});});});
-function setLang(l){
-  var kk=l==='kk';
-  texts.forEach(function(t){t.n.nodeValue=kk?t.ru.replace(t.k,KK[t.k]):t.ru;});
-  attrs.forEach(function(t){t.el.setAttribute(t.a,kk?KK[t.ru]:t.ru);});
-  document.documentElement.lang=kk?'kk':'ru';
-  document.title=kk?META.title:RU_TITLE; if(md)md.content=kk?META.desc:RU_DESC;
-  document.querySelectorAll('.lang-switch button').forEach(function(b){b.setAttribute('aria-pressed',b.dataset.lang===l?'true':'false');});
-  try{localStorage.setItem('kit-lang',l);}catch(e){}
-}
-document.querySelectorAll('.lang-switch button').forEach(function(b){b.addEventListener('click',function(){setLang(b.dataset.lang);});});
-var q=(location.search.match(/[?&]lang=(ru|kk)/)||[])[1], saved=null;
-try{saved=localStorage.getItem('kit-lang');}catch(e){}
-var start=q||saved||((navigator.language||'').toLowerCase().indexOf('kk')===0?'kk':'ru');
-if(start==='kk')setLang('kk');
+(function () {
+  var root = document.documentElement;
+  var texts = [].slice.call(document.querySelectorAll('[data-kk]'));
+  var alts = [].slice.call(document.querySelectorAll('[data-kk-alt]'));
+  var labels = [].slice.call(document.querySelectorAll('[data-kk-label]'));
+  texts.forEach(function (e) { e.setAttribute('data-ru', e.textContent); });
+  alts.forEach(function (e) { e.setAttribute('data-ru-alt', e.getAttribute('alt') || ''); });
+  labels.forEach(function (e) { e.setAttribute('data-ru-label', e.getAttribute('aria-label') || ''); });
+  var ruTitle = document.title, kkTitle = root.getAttribute('data-kk-title');
+  function setLang(l) {
+    var kk = l === 'kk';
+    texts.forEach(function (e) { e.textContent = e.getAttribute(kk ? 'data-kk' : 'data-ru'); });
+    alts.forEach(function (e) { e.setAttribute('alt', e.getAttribute(kk ? 'data-kk-alt' : 'data-ru-alt')); });
+    labels.forEach(function (e) { e.setAttribute('aria-label', e.getAttribute(kk ? 'data-kk-label' : 'data-ru-label')); });
+    root.lang = kk ? 'kk' : 'ru';
+    document.title = kk ? kkTitle : ruTitle;
+    [].forEach.call(document.querySelectorAll('.lang-switch button'), function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-lang') === l ? 'true' : 'false');
+    });
+    try { localStorage.setItem('kit-lang', l); } catch (e) {}
+  }
+  [].forEach.call(document.querySelectorAll('.lang-switch button'), function (b) {
+    b.addEventListener('click', function () { setLang(b.getAttribute('data-lang')); });
+  });
+  var q = (location.search.match(/[?&]lang=(ru|kk)/) || [])[1], saved = null;
+  try { saved = localStorage.getItem('kit-lang'); } catch (e) {}
+  var start = q || saved || ((navigator.language || '').toLowerCase().indexOf('kk') === 0 ? 'kk' : 'ru');
+  if (start === 'kk') setLang('kk');
 })();
 </script>
 </body>
