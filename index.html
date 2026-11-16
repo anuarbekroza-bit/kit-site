@@ -14,6 +14,11 @@
 body{margin:0;background:#F5FBFD}
 a{color:#0F2A44}a:hover{color:#17739A}
 html{scroll-behavior:smooth}
+.lang-switch{display:inline-flex;border:1.5px solid #0F2A44;border-radius:999px;overflow:hidden;background:#fff}
+.lang-switch button{font:700 14px 'Manrope',system-ui,sans-serif;color:#0F2A44;background:transparent;border:0;padding:0 14px;min-height:44px;min-width:56px;cursor:pointer}
+.lang-switch button[aria-pressed="true"]{background:#0F2A44;color:#fff}
+.lang-switch button:focus-visible{outline:3px solid #8ED0E8;outline-offset:-3px}
+
 img{max-width:100%}
 @media (max-width:640px){h1{font-size:36px!important} h2{font-size:28px!important} #top>div:last-child{height:420px!important} #order>div{padding:36px 24px!important}}
 </style>
@@ -39,10 +44,15 @@ img{max-width:100%}
 <a href="#order" style="text-decoration: none;">Доставка</a>
 <a href="#contacts" style="text-decoration: none;">Контакты</a>
 </nav>
+<div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+<div class="lang-switch" role="group" aria-label="Язык сайта">
+<button type="button" data-lang="ru" aria-pressed="true">РУС</button><button type="button" data-lang="kk" aria-pressed="false">ҚАЗ</button>
+</div>
 <a href="https://wa.me/77024405009" style="display: inline-flex; align-items: center; gap: 8px; background: #17739A; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 15px; padding: 12px 20px; border-radius: 999px; min-height: 44px; box-sizing: border-box;">
 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"></path></svg>
 WhatsApp
 </a>
+</div>
 </div>
 </header>
 
@@ -268,5 +278,32 @@ WhatsApp
 </footer>
 
 </div>
+<script>
+(function(){
+var KK={"Основное меню": "Негізгі мәзір", "Каталог": "Каталог", "Новинки": "Жаңа түсімдер", "Отзывы": "Пікірлер", "Доставка": "Жеткізу", "Контакты": "Байланыс", "Детская и подростковая одежда · Астана": "Балалар мен жасөспірімдер киімі · Астана", "Одежда для детей и подростков": "Балалар мен жасөспірімдерге арналған киім", "От малышей до подростков: размеры от 73 до 170 см. Подберём размер в WhatsApp и доставим по всему Казахстану.": "Сәбилерден жасөспірімдерге дейін: бойы 73-тен 170 см-ге дейінгі өлшемдер. Өлшемді WhatsApp арқылы таңдап береміз және бүкіл Қазақстан бойынша жеткіземіз.", "Смотреть каталог": "Каталогты қарау", "Подобрать размер": "Өлшем таңдау", "Женис, 26А · 10:00–20:00": "Жеңіс, 26А · 10:00–20:00", "Доставка по Казахстану": "Қазақстан бойынша жеткізу", "Дети в куртках и стильных образах из магазина «Кит»": "«Кит» дүкенінің стильді киімдеріндегі балалар", "Выберите раздел — покажем всё, что есть в наличии": "Бөлімді таңдаңыз — қолда бар барлық тауарды көрсетеміз", "Малышам": "Сәбилерге", "рост 73–80 см →": "бойы 73–80 см →", "Детям": "Балаларға", "рост 90–130 см →": "бойы 90–130 см →", "Подросткам": "Жасөспірімдерге", "рост 110–170 см →": "бойы 110–170 см →", "Зимние куртки": "Қысқы курткалар", "Осенние куртки": "Күзгі курткалар", "Шапки": "Бас киімдер", "Школа": "Мектеп", "Фото категории (нет летних фото)": "Санат фотосы (жазғы фото әзірге жоқ)", "Лето": "Жаз", "Все новинки в Instagram →": "Барлық жаңа түсімдер Instagram-да →", "Бомбер с капюшоном": "Капюшонды бомбер", "[Рост, см]": "[Бойы, см]", "[Цена] ₸": "[Бағасы] ₸", "Заказать": "Тапсырыс беру", "Свитшот BLINKS и юбка в клетку": "BLINKS свитшоты және торлы юбка", "Свитшот и спортивные брюки": "Свитшот және спорттық шалбар", "Брюки карго": "Карго шалбар", "Как заказать": "Қалай тапсырыс беруге болады", "Выберите вещь": "Киімді таңдаңыз", "На сайте или в нашем Instagram. Сохраните фото понравившейся модели.": "Сайттан немесе Instagram парақшамыздан. Ұнаған үлгінің суретін сақтап қойыңыз.", "Напишите в WhatsApp": "WhatsApp-қа жазыңыз", "Подскажем размер по росту ребёнка или подростка и проверим наличие.": "Баланың немесе жасөспірімнің бойына қарай өлшемін айтып, тауардың бар-жоғын тексереміз.", "Получите заказ": "Тапсырысты алыңыз", "Доставим по всему Казахстану или приходите в магазин на Женис, 26А.": "Бүкіл Қазақстан бойынша жеткіземіз немесе Жеңіс, 26А мекенжайындағы дүкенімізге келіңіз.", "Написать в WhatsApp": "WhatsApp-қа жазу", "Отзывы покупателей": "Сатып алушылардың пікірлері", "60 оценок и 37 отзывов в 2ГИС": "2ГИС-те 60 баға және 37 пікір", "Все отзывы в 2ГИС →": "Барлық пікірлер 2ГИС-те →", "12 ноября 2026 · отзыв в 2ГИС": "12 қараша 2026 · 2ГИС-тегі пікір", "10 ноября 2026 · отзыв в 2ГИС": "10 қараша 2026 · 2ГИС-тегі пікір", "23 сентября 2026 · отзыв в 2ГИС": "23 қыркүйек 2026 · 2ГИС-тегі пікір", "26 июля 2026 · отзыв в 2ГИС": "26 шілде 2026 · 2ГИС-тегі пікір", "17 сентября 2026 · отзыв в 2ГИС": "17 қыркүйек 2026 · 2ГИС-тегі пікір", "15 ноября 2025 · отзыв в 2ГИС": "15 қараша 2025 · 2ГИС-тегі пікір", "Мы в Instagram": "Біз Instagram-дамыз", "Более 24 тысяч подписчиков, новинки и видео каждый день": "24 мыңнан астам жазылушы, күн сайын жаңа түсімдер мен видеолар", "Образ из лукбука": "Лукбуктағы образ", "Куртка в магазине": "Дүкендегі куртка", "Вешалки в магазине «Кит»": "«Кит» дүкеніндегі киімдер", "Адрес магазина": "Дүкен мекенжайы", "Астана, проспект Женис, 26А": "Астана, Жеңіс даңғылы, 26А", "Часы работы": "Жұмыс уақыты", "По всему Казахстану": "Бүкіл Қазақстан бойынша", "Наш магазин на Женис, 26А": "Жеңіс, 26А мекенжайындағы дүкеніміз", "Мы на 2ГИС": "Біз 2ГИС-теміз", "Магазин детской одежды «Кит» · проспект Женис, 26А": "«Кит» балалар киімі дүкені · Жеңіс даңғылы, 26А", "4,7 · 60 оценок": "4,7 · 60 баға", "Открыть в 2ГИС и построить маршрут": "2ГИС-те ашып, бағыт құру", "© 2026 «Кит» — детская и подростковая одежда, Астана": "© 2026 «Кит» — балалар мен жасөспірімдер киімі, Астана", "Язык сайта": "Сайт тілі"}, META={"title": "Кит — балалар мен жасөспірімдер киімі, Астана", "desc": "«Кит» балалар мен жасөспірімдер киімі дүкені, Астана, Жеңіс даңғылы, 26А. Бойы 73-тен 170 см-ге дейінгі өлшемдер, Қазақстан бойынша жеткізу, WhatsApp арқылы өлшем таңдау."};
+var RU_TITLE=document.title, md=document.querySelector('meta[name="description"]'), RU_DESC=md?md.content:'';
+var texts=[], attrs=[];
+var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode:function(n){
+  if(!n.nodeValue.trim())return NodeFilter.FILTER_REJECT;
+  var p=n.parentNode; while(p&&p!==document.body){var t=p.nodeName;if(t==='SCRIPT'||t==='STYLE'||t==='BLOCKQUOTE')return NodeFilter.FILTER_REJECT;p=p.parentNode;}
+  return NodeFilter.FILTER_ACCEPT;}});
+var n; while((n=w.nextNode())){var k=n.nodeValue.replace(/\s+/g,' ').trim(); if(KK[k]) texts.push({n:n,ru:n.nodeValue,k:k});}
+document.querySelectorAll('[alt],[aria-label]').forEach(function(el){['alt','aria-label'].forEach(function(a){var v=el.getAttribute(a); if(v&&KK[v]) attrs.push({el:el,a:a,ru:v});});});
+function setLang(l){
+  var kk=l==='kk';
+  texts.forEach(function(t){t.n.nodeValue=kk?t.ru.replace(t.k,KK[t.k]):t.ru;});
+  attrs.forEach(function(t){t.el.setAttribute(t.a,kk?KK[t.ru]:t.ru);});
+  document.documentElement.lang=kk?'kk':'ru';
+  document.title=kk?META.title:RU_TITLE; if(md)md.content=kk?META.desc:RU_DESC;
+  document.querySelectorAll('.lang-switch button').forEach(function(b){b.setAttribute('aria-pressed',b.dataset.lang===l?'true':'false');});
+  try{localStorage.setItem('kit-lang',l);}catch(e){}
+}
+document.querySelectorAll('.lang-switch button').forEach(function(b){b.addEventListener('click',function(){setLang(b.dataset.lang);});});
+var q=(location.search.match(/[?&]lang=(ru|kk)/)||[])[1], saved=null;
+try{saved=localStorage.getItem('kit-lang');}catch(e){}
+var start=q||saved||((navigator.language||'').toLowerCase().indexOf('kk')===0?'kk':'ru');
+if(start==='kk')setLang('kk');
+})();
+</script>
 </body>
 </html>
