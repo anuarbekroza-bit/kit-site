@@ -5,6 +5,7 @@ items:
     show: true
   - name_ru: Свитшот BLINKS и юбка в клетку
     name_kk: BLINKS свитшоты және торлы юбка
+    sizes: "110"
     image: /images/kit-new2.jpg
     show: true
   - name_ru: Свитшот и спортивные брюки
