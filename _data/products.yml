@@ -1,25 +1,18 @@
 items:
-  - name_ru: "Бомбер с капюшоном"
-    name_kk: "Капюшонды бомбер"
-    sizes: ""
-    price: ""
-    image: "/images/kit-new1.jpg"
+  - name_ru: Бомбер с капюшоном
+    name_kk: Капюшонды бомбер
+    image: /images/kit-new1.jpg
     show: true
-  - name_ru: "Свитшот BLINKS и юбка в клетку"
-    name_kk: "BLINKS свитшоты және торлы юбка"
-    sizes: ""
-    price: ""
-    image: "/images/kit-new2.jpg"
+  - name_ru: Свитшот BLINKS и юбка в клетку
+    name_kk: BLINKS свитшоты және торлы юбка
+    image: /images/kit-new2.jpg
     show: true
-  - name_ru: "Свитшот и спортивные брюки"
-    name_kk: "Свитшот және спорттық шалбар"
-    sizes: ""
-    price: ""
-    image: "/images/kit-new3.jpg"
+  - name_ru: Свитшот и спортивные брюки
+    name_kk: Свитшот және спорттық шалбар
+    image: /images/kit-new3.jpg
     show: true
-  - name_ru: "Брюки карго"
-    name_kk: "Карго шалбар"
-    sizes: ""
-    price: ""
-    image: "/images/kit-new4.jpg"
+  - name_ru: Брюки карго
+    name_kk: Карго шалбар
+    price: 12 900
+    image: /images/kit-new4.jpg
     show: true
