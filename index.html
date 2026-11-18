@@ -66,6 +66,7 @@ nav a{text-decoration:none}
 .age-0{background:var(--sky-l)}.age-0 span{color:#0F4F6B}
 .age-1{background:var(--sun)}.age-1 span{color:#5C5330}
 .age-2{background:var(--ink);color:#fff}.age-2 b{color:#fff}.age-2 span{color:#C9E9F5}
+.age-photo{background-size:cover;background-position:center;min-height:240px;color:#fff}.age-photo b{color:#fff}.age-photo span{color:#E8F6FC}
 .cat{flex:1 1 300px;text-decoration:none;background:#fff;border-radius:24px;overflow:hidden;border:1px solid var(--line);display:flex;flex-direction:column}
 .cat img,.cat .ph{height:240px;width:100%;object-fit:cover;object-position:center 25%}
 .ph{background:var(--sky-l);display:flex;align-items:center;justify-content:center;color:#0F4F6B;font-size:14px;font-weight:600;text-align:center;padding:16px}
@@ -163,7 +164,7 @@ WhatsApp</a>
 <div class="grid" style="margin-bottom:20px">
 {%- for a in site.data.ages.items %}
 {%- assign mod = forloop.index0 | modulo: 3 %}
-<a href="#new" class="age age-{{ mod }}"><b data-kk="{{ a.name_kk | default: a.name_ru | escape }}">{{ a.name_ru | escape }}</b><span data-kk="бойы {{ a.sizes | escape }} см →">рост {{ a.sizes | escape }} см →</span></a>
+<a href="#new" class="age age-{{ mod }}{% if a.image and a.image != "" %} age-photo{% endif %}"{% if a.image and a.image != "" %} style="background-image:linear-gradient(180deg,rgba(15,42,64,0) 45%,rgba(15,42,64,.78) 100%),url('{{ a.image | relative_url }}')"{% endif %}><b data-kk="{{ a.name_kk | default: a.name_ru | escape }}">{{ a.name_ru | escape }}</b><span data-kk="бойы {{ a.sizes | escape }} см →">рост {{ a.sizes | escape }} см →</span></a>
 {%- endfor %}
 </div>
 <div class="grid">
