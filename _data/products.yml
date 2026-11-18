@@ -14,5 +14,6 @@ items:
   - name_ru: Брюки карго
     name_kk: Карго шалбар
     price: 12 900
+    sizes: 110-140
     image: /images/kit-new4.jpg
     show: true
