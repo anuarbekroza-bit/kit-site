@@ -1,0 +1,346 @@
+'use strict';
+// Страницы админки: вход и само приложение (обычный HTML + JS, без сборки).
+const { esc } = require('./site');
+
+const CSS = `
+:root{--ink:#0F2A44;--muted:#5A6B80;--accent:#17739A;--line:#DCE6EE;--bg:#F4F8FB;--card:#fff;--ok:#1E7F4F;--err:#B42318;--sky:#DFF2F9}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 'Manrope',system-ui,-apple-system,sans-serif}
+a{color:var(--accent)}
+button,input,select,textarea{font:inherit;color:inherit}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 14px;min-height:40px;cursor:pointer;font-weight:600;text-decoration:none;color:var(--ink)}
+.btn:hover{border-color:#B9CAD8}
+.btn-main{background:var(--accent);border-color:var(--accent);color:#fff}.btn-main:hover{filter:brightness(1.07)}
+.btn-danger{color:var(--err)}
+.btn-sm{padding:5px 10px;min-height:34px;font-size:14px}
+.btn:disabled{opacity:.5;cursor:default}
+input[type=text],input[type=password],textarea,select{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;min-height:42px}
+textarea{min-height:96px;resize:vertical}
+input:focus,textarea:focus,select:focus{outline:2px solid #8ED0E8;border-color:#8ED0E8}
+label.f{display:flex;flex-direction:column;gap:6px;font-weight:600;font-size:15px}
+.hint{font-weight:400;font-size:13px;color:var(--muted)}
+.layout{display:flex;min-height:100vh}
+.side{width:270px;flex-shrink:0;background:#fff;border-right:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;overflow:auto}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;padding:4px 8px 14px}
+.brand i{width:36px;height:36px;border-radius:50%;background:#8ED0E8;display:flex;align-items:center;justify-content:center;font-style:normal}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;border:0;background:none;text-align:left;width:100%;font-weight:600}
+.nav-item:hover{background:var(--bg)}.nav-item.on{background:var(--sky);color:#0F4F6B}
+.nav-sep{height:1px;background:var(--line);margin:10px 4px}
+.me{margin-top:auto;padding:12px 8px 0;font-size:14px;color:var(--muted);display:flex;flex-direction:column;gap:8px}
+.main{flex:1;min-width:0;padding:28px 32px 120px;max-width:980px}
+h1{font-size:26px;margin:0 0 6px}
+.sub{color:var(--muted);margin:0 0 22px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:12px}
+.card-h{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer}
+.card-h .t{flex:1;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card-h .t small{font-weight:500;color:var(--muted)}
+.card-b{padding:4px 16px 18px;display:flex;flex-direction:column;gap:14px;border-top:1px solid var(--line)}
+.card.closed .card-b{display:none}
+.thumb{width:44px;height:44px;border-radius:8px;object-fit:cover;background:var(--sky);flex-shrink:0}
+.img-f{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.img-f img{width:120px;height:150px;object-fit:cover;border-radius:10px;background:var(--sky)}
+.img-f .ph{width:120px;height:150px;border-radius:10px;background:var(--sky);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;text-align:center;padding:8px}
+.img-f .acts{display:flex;flex-direction:column;gap:8px}
+.check{display:flex;align-items:center;gap:10px;font-weight:600}
+.check input{width:20px;height:20px}
+.bar{position:fixed;left:270px;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 32px;display:flex;gap:12px;align-items:center;z-index:5}
+.bar .msg{flex:1;font-size:14px;color:var(--muted)}
+.bar .msg.err{color:var(--err);white-space:pre-line}.bar .msg.ok{color:var(--ok)}
+.tbl{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.tbl th,.tbl td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);font-size:15px;vertical-align:top}
+.tbl th{background:#F8FBFD;font-size:13px;color:var(--muted)}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;background:var(--sky);color:#0F4F6B;font-size:13px;font-weight:700}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px;margin-bottom:16px}
+.menu-btn{display:none}
+.roles{display:grid;gap:8px;margin-bottom:16px}
+.roles div{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:14px}
+@media (max-width:820px){
+  .layout{display:block}
+  .side{position:fixed;inset:0 auto 0 0;z-index:20;transform:translateX(-100%);transition:transform .2s;height:100%;box-shadow:0 0 40px rgba(0,0,0,.15)}
+  .side.open{transform:none}
+  .menu-btn{display:inline-flex;margin-bottom:14px}
+  .main{padding:18px 16px 130px}
+  .bar{left:0;padding:10px 16px}
+  .grid2{grid-template-columns:1fr}
+}
+`;
+
+function loginPage(err) {
+  const msg = err === 'bad' ? 'Неверный логин или пароль' : err === 'blocked' ? 'Слишком много попыток. Подождите 15 минут.' : '';
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Вход — админка «Кит»</title><meta name="robots" content="noindex"><style>${CSS}
+.login{max-width:380px;margin:12vh auto;padding:0 16px}
+</style></head><body><div class="login">
+<div class="brand" style="justify-content:center;padding-bottom:20px"><i>🐋</i>Админка «Кит»</div>
+<form method="post" action="/admin/login" class="box">
+${msg ? `<div style="color:var(--err);font-weight:600">${esc(msg)}</div>` : ''}
+<label class="f">Логин<input type="text" name="login" autocomplete="username" autocapitalize="none" required autofocus></label>
+<label class="f">Пароль<input type="password" name="password" autocomplete="current-password" required></label>
+<button class="btn btn-main" type="submit">Войти</button>
+</form></div></body></html>`;
+}
+
+function appPage({ user, csrf, sections, roles, siteUrl }) {
+  const boot = JSON.stringify({ user, csrf, sections, roles, siteUrl }).replace(/</g, '\\u003c');
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Админка «Кит»</title><meta name="robots" content="noindex"><style>${CSS}</style></head><body>
+<div class="layout">
+<aside class="side" id="side"></aside>
+<main class="main"><button class="btn menu-btn" id="menuBtn">☰ Меню</button><div id="view"></div></main>
+</div>
+<div class="bar" id="bar" hidden><span class="msg" id="msg"></span><button class="btn btn-main" id="saveBtn">Сохранить</button></div>
+<script>window.BOOT=${boot};</script>
+<script>${CLIENT}</script>
+</body></html>`;
+}
+
+// ---------- JS админки (выполняется в браузере) ----------
+const CLIENT = String.raw`
+(function(){
+var B = window.BOOT, U = B.user;
+var $ = function(s, r){ return (r||document).querySelector(s); };
+function h(tag, attrs, kids){
+  var e = document.createElement(tag);
+  for (var k in (attrs||{})) {
+    var v = attrs[k];
+    if (v === null || v === undefined || v === false) continue;
+    if (k === 'text') e.textContent = v;
+    else if (k.slice(0,2) === 'on') e.addEventListener(k.slice(2), v);
+    else if (k === 'value') e.value = v;
+    else if (k === 'checked') e.checked = !!v;
+    else e.setAttribute(k, v === true ? '' : v);
+  }
+  [].concat(kids||[]).forEach(function(c){ if (c === null || c === undefined || c === false) return; e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+  return e;
+}
+function api(method, url, body){
+  return fetch('/admin/api' + url, { method: method, headers: { 'Content-Type': 'application/json', 'X-CSRF': B.csrf }, body: body === undefined ? undefined : JSON.stringify(body), credentials: 'same-origin' })
+    .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){
+      if (r.status === 401) { location.href = '/admin/login'; throw new Error('Войдите заново'); }
+      if (!r.ok) throw new Error(j.error || 'Ошибка ' + r.status); return j; }); });
+}
+var state = { view: null, data: null, dirty: false };
+function setMsg(t, cls){ var m = $('#msg'); m.textContent = t || ''; m.className = 'msg' + (cls ? ' ' + cls : ''); }
+function markDirty(){ state.dirty = true; setMsg('Есть несохранённые изменения'); }
+window.addEventListener('beforeunload', function(e){ if (state.dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+// ---------- меню ----------
+function renderSide(){
+  var side = $('#side'); side.innerHTML = '';
+  side.appendChild(h('div', {'class':'brand'}, [h('i',{text:'🐋'}), 'Админка «Кит»']));
+  B.sections.forEach(function(s){
+    if (U.sections.indexOf(s.key) < 0) return;
+    side.appendChild(h('button', {'class':'nav-item' + (state.view === s.key ? ' on' : ''), onclick: function(){ go(s.key); }}, [s.icon + ' ' + s.label]));
+  });
+  side.appendChild(h('div', {'class':'nav-sep'}));
+  if (U.users) side.appendChild(h('button', {'class':'nav-item' + (state.view === 'users' ? ' on' : ''), onclick: function(){ go('users'); }}, ['👥 Сотрудники и доступ']));
+  if (U.log) side.appendChild(h('button', {'class':'nav-item' + (state.view === 'log' ? ' on' : ''), onclick: function(){ go('log'); }}, ['📜 Журнал действий']));
+  side.appendChild(h('button', {'class':'nav-item' + (state.view === 'me' ? ' on' : ''), onclick: function(){ go('me'); }}, ['🔑 Мой пароль']));
+  side.appendChild(h('a', {'class':'nav-item', href: B.siteUrl, target:'_blank', rel:'noopener'}, ['🌐 Открыть сайт ↗']));
+  var form = h('form', {method:'post', action:'/admin/logout'}, [h('button', {'class':'btn btn-sm', type:'submit'}, ['Выйти'])]);
+  side.appendChild(h('div', {'class':'me'}, [h('div', null, [h('b', {text: U.name || U.login}), ' · ', h('span', {'class':'pill', text: U.roleLabel})]), form]));
+}
+function go(view){
+  if (state.dirty && !confirm('Есть несохранённые изменения. Уйти без сохранения?')) return;
+  state.dirty = false; state.view = view; location.hash = view;
+  $('#side').classList.remove('open');
+  renderSide(); setMsg('');
+  var sec = B.sections.filter(function(s){ return s.key === view; })[0];
+  if (sec) return openSection(sec);
+  $('#bar').hidden = true;
+  if (view === 'users') return openUsers();
+  if (view === 'log') return openLog();
+  if (view === 'me') return openMe();
+}
+$('#menuBtn').onclick = function(){ $('#side').classList.toggle('open'); };
+
+// ---------- поля ----------
+function resizeImage(file){
+  return new Promise(function(resolve, reject){
+    var img = new Image(), url = URL.createObjectURL(file);
+    img.onload = function(){
+      var max = 1600, w = img.naturalWidth, hh = img.naturalHeight, k = Math.min(1, max / Math.max(w, hh));
+      var c = document.createElement('canvas'); c.width = Math.round(w*k); c.height = Math.round(hh*k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); resolve(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = function(){ reject(new Error('Не получилось открыть фото')); };
+    img.src = url;
+  });
+}
+function field(f, obj, onChange){
+  var v = obj[f.name];
+  var hint = f.hint ? h('span', {'class':'hint', text: f.hint}) : null;
+  var set = function(val){ obj[f.name] = val; markDirty(); if (onChange) onChange(); };
+  if (f.type === 'boolean') {
+    return h('label', {'class':'check'}, [h('input', {type:'checkbox', checked: v !== false, onchange: function(e){ set(e.target.checked); }}), f.label]);
+  }
+  if (f.type === 'image') {
+    var wrap = h('div', {'class':'img-f'});
+    var draw = function(){
+      wrap.innerHTML = '';
+      var cur = obj[f.name];
+      wrap.appendChild(cur ? h('img', {src: cur, alt: ''}) : h('div', {'class':'ph', text:'Нет фото'}));
+      var file = h('input', {type:'file', accept:'image/*', hidden: true, onchange: function(e){
+        var fl = e.target.files[0]; if (!fl) return;
+        setMsg('Загружаю фото…');
+        resizeImage(fl).then(function(data){ return api('POST', '/upload', {data: data}); })
+          .then(function(j){ set(j.path); draw(); setMsg('Фото загружено. Не забудьте нажать «Сохранить».'); })
+          .catch(function(err){ setMsg(err.message, 'err'); });
+      }});
+      wrap.appendChild(h('div', {'class':'acts'}, [file,
+        h('button', {'class':'btn btn-sm', type:'button', onclick: function(){ file.click(); }}, [cur ? 'Заменить фото' : 'Загрузить фото']),
+        cur ? h('button', {'class':'btn btn-sm btn-danger', type:'button', onclick: function(){ set(''); draw(); }}, ['Убрать фото']) : null]));
+    };
+    draw();
+    return h('div', {'class':'f', style:'display:flex;flex-direction:column;gap:6px'}, [h('b', {text: f.label, style:'font-size:15px'}), wrap, hint]);
+  }
+  var input = f.type === 'text'
+    ? h('textarea', {oninput: function(e){ set(e.target.value); }}, [])
+    : h('input', {type:'text', oninput: function(e){ set(e.target.value); }});
+  input.value = v || '';
+  return h('label', {'class':'f'}, [f.label + (f.required ? ' *' : ''), input, hint]);
+}
+
+// ---------- разделы ----------
+function openSection(sec){
+  var view = $('#view'); view.innerHTML = '';
+  view.appendChild(h('h1', {text: sec.icon + ' ' + sec.label}));
+  view.appendChild(h('p', {'class':'sub', text: 'Измените и нажмите «Сохранить» — сайт обновится сразу.'}));
+  var box = h('div', {text:'Загрузка…'}); view.appendChild(box);
+  $('#bar').hidden = false;
+  api('GET', '/section/' + sec.key).then(function(j){
+    state.data = j.data; box.innerHTML = '';
+    if (sec.type === 'list') drawList(sec, box); else drawSettings(sec, box);
+  }).catch(function(e){ box.textContent = e.message; });
+  $('#saveBtn').onclick = function(){
+    var btn = $('#saveBtn'); btn.disabled = true; setMsg('Сохраняю…');
+    api('PUT', '/section/' + sec.key, {data: state.data}).then(function(j){
+      state.data = j.data; state.dirty = false; setMsg('Сохранено ✓ Сайт обновлён.', 'ok');
+      if (sec.type === 'list') { box.innerHTML = ''; drawList(sec, box); }
+    }).catch(function(e){ setMsg(e.message, 'err'); }).finally(function(){ btn.disabled = false; });
+  };
+}
+function drawSettings(sec, box){
+  var b = h('div', {'class':'box'});
+  sec.fields.forEach(function(f){ b.appendChild(field(f, state.data)); });
+  box.appendChild(b);
+}
+function summary(sec, it){
+  var main = it[sec.summary[0]] || (sec.summary[0] === 'image' ? 'Фото' : '(без названия)');
+  var rest = sec.summary.slice(1).map(function(k){ return it[k]; }).filter(Boolean).join(' · ');
+  return [String(main), rest ? h('small', {text: ' · ' + rest}) : null, it.show === false ? h('small', {text: ' · скрыт'}) : null];
+}
+function drawList(sec, box){
+  var items = state.data, open = {};
+  var list = h('div'); box.appendChild(list);
+  var imgField = sec.fields.filter(function(f){ return f.type === 'image'; })[0];
+  function redraw(){
+    list.innerHTML = '';
+    items.forEach(function(it, i){
+      var title = h('span', {'class':'t'}, summary(sec, it));
+      var card = h('div', {'class':'card' + (open[i] ? '' : ' closed')});
+      var head = h('div', {'class':'card-h', onclick: function(e){ if (e.target.closest('button')) return; open[i] = !open[i]; card.classList.toggle('closed'); }}, [
+        imgField ? (it[imgField.name] ? h('img', {'class':'thumb', src: it[imgField.name], alt:''}) : h('span', {'class':'thumb'})) : null,
+        title,
+        h('button', {'class':'btn btn-sm', type:'button', title:'Выше', disabled: i === 0 ? true : null, onclick: function(){ move(i, -1); }}, ['↑']),
+        h('button', {'class':'btn btn-sm', type:'button', title:'Ниже', disabled: i === items.length - 1 ? true : null, onclick: function(){ move(i, 1); }}, ['↓']),
+        h('button', {'class':'btn btn-sm btn-danger', type:'button', title:'Удалить', onclick: function(){
+          if (!confirm('Удалить «' + (it[sec.summary[0]] || sec.item) + '»?')) return;
+          items.splice(i, 1); open = {}; markDirty(); redraw(); }}, ['🗑'])]);
+      var body = h('div', {'class':'card-b'});
+      sec.fields.forEach(function(f){ body.appendChild(field(f, it, function(){ title.innerHTML = ''; summary(sec, it).forEach(function(n){ if (n) title.appendChild(typeof n === 'string' ? document.createTextNode(n) : n); }); })); });
+      card.appendChild(head); card.appendChild(body); list.appendChild(card);
+    });
+    if (!items.length) list.appendChild(h('p', {'class':'sub', text:'Пока пусто.'}));
+  }
+  function move(i, d){ var t = items[i]; items[i] = items[i+d]; items[i+d] = t; open = {}; markDirty(); redraw(); }
+  box.appendChild(h('button', {'class':'btn', type:'button', onclick: function(){
+    var it = {}; sec.fields.forEach(function(f){ it[f.name] = f.type === 'boolean' ? (f.default !== false) : ''; });
+    items.push(it); open = {}; open[items.length - 1] = true; markDirty(); redraw();
+  }}, ['+ Добавить: ' + sec.item.toLowerCase()]));
+  redraw();
+}
+
+// ---------- сотрудники ----------
+function roleSelect(val){
+  var s = h('select');
+  Object.keys(B.roles).forEach(function(k){ var o = h('option', {value: k, text: B.roles[k].label}); if (k === val) o.selected = true; s.appendChild(o); });
+  return s;
+}
+function openUsers(){
+  var view = $('#view'); view.innerHTML = '';
+  view.appendChild(h('h1', {text:'👥 Сотрудники и доступ'}));
+  view.appendChild(h('p', {'class':'sub', text:'Каждый входит под своим логином и видит только свои разделы. Все действия пишутся в журнал.'}));
+  var roles = h('div', {'class':'roles'});
+  Object.keys(B.roles).forEach(function(k){ roles.appendChild(h('div', null, [h('b', {text: B.roles[k].label}), ' — ' + B.roles[k].desc])); });
+  view.appendChild(roles);
+  var tableBox = h('div', {text:'Загрузка…'}); view.appendChild(tableBox);
+  function load(){
+    api('GET', '/users').then(function(j){
+      tableBox.innerHTML = '';
+      var t = h('table', {'class':'tbl'}, [h('tr', null, [h('th',{text:'Логин'}), h('th',{text:'Имя'}), h('th',{text:'Доступ'}), h('th',{text:''})])]);
+      j.data.forEach(function(u){
+        var sel = roleSelect(u.role);
+        sel.onchange = function(){ api('PUT', '/users/' + u.id, {role: sel.value}).then(function(){ setMsg('Доступ изменён', 'ok'); load(); }).catch(function(e){ alert(e.message); load(); }); };
+        var acts = h('div', {style:'display:flex;gap:6px;flex-wrap:wrap'}, [
+          h('button', {'class':'btn btn-sm', type:'button', onclick: function(){
+            var p = prompt('Новый пароль для ' + u.login + ' (минимум 8 символов):'); if (!p) return;
+            api('PUT', '/users/' + u.id, {password: p}).then(function(){ alert('Пароль изменён'); }).catch(function(e){ alert(e.message); }); }}, ['Сменить пароль']),
+          u.id === U.id ? null : h('button', {'class':'btn btn-sm btn-danger', type:'button', onclick: function(){
+            if (!confirm('Удалить сотрудника ' + u.login + '?')) return;
+            api('DELETE', '/users/' + u.id).then(load).catch(function(e){ alert(e.message); }); }}, ['Удалить'])]);
+        t.appendChild(h('tr', null, [h('td', null, [h('b', {text: u.login})]), h('td', {text: u.name}), h('td', null, [sel]), h('td', null, [acts])]));
+      });
+      tableBox.appendChild(t);
+    }).catch(function(e){ tableBox.textContent = e.message; });
+  }
+  load();
+  var login = h('input', {type:'text', autocapitalize:'none', placeholder:'например: aigerim'}), name = h('input', {type:'text', placeholder:'Айгерим, менеджер'});
+  var pass = h('input', {type:'text', placeholder:'минимум 8 символов'}), role = roleSelect('manager');
+  var out = h('div', {'class':'hint'});
+  view.appendChild(h('div', {'class':'box', style:'margin-top:18px'}, [h('b', {text:'Добавить сотрудника'}),
+    h('div', {'class':'grid2'}, [h('label', {'class':'f'}, ['Логин', login]), h('label', {'class':'f'}, ['Имя', name]),
+      h('label', {'class':'f'}, ['Пароль', pass]), h('label', {'class':'f'}, ['Уровень доступа', role])]),
+    h('div', null, [h('button', {'class':'btn btn-main', type:'button', onclick: function(){
+      api('POST', '/users', {login: login.value, name: name.value, password: pass.value, role: role.value}).then(function(){
+        out.textContent = 'Готово. Передайте сотруднику: адрес ' + location.origin + '/admin, логин ' + login.value.trim().toLowerCase() + ' и пароль.';
+        login.value = name.value = pass.value = ''; load(); }).catch(function(e){ out.textContent = e.message; }); }}, ['Добавить'])]), out]));
+}
+
+// ---------- журнал ----------
+function openLog(){
+  var view = $('#view'); view.innerHTML = '';
+  view.appendChild(h('h1', {text:'📜 Журнал действий'}));
+  view.appendChild(h('p', {'class':'sub', text:'Кто, что и когда менял. Время — по серверу (UTC).'}));
+  var box = h('div', {text:'Загрузка…'}); view.appendChild(box);
+  api('GET', '/log').then(function(j){
+    box.innerHTML = '';
+    var t = h('table', {'class':'tbl'}, [h('tr', null, [h('th',{text:'Когда'}), h('th',{text:'Кто'}), h('th',{text:'Что сделал'})])]);
+    j.data.forEach(function(r){ t.appendChild(h('tr', null, [h('td', {text: r.at}), h('td', {text: r.user}), h('td', {text: r.action})])); });
+    box.appendChild(t);
+  }).catch(function(e){ box.textContent = e.message; });
+}
+
+// ---------- мой пароль ----------
+function openMe(){
+  var view = $('#view'); view.innerHTML = '';
+  view.appendChild(h('h1', {text:'🔑 Мой пароль'}));
+  var cur = h('input', {type:'password', autocomplete:'current-password'}), nw = h('input', {type:'password', autocomplete:'new-password'}), nw2 = h('input', {type:'password', autocomplete:'new-password'});
+  var out = h('div', {'class':'hint'});
+  view.appendChild(h('div', {'class':'box', style:'max-width:420px'}, [
+    h('label', {'class':'f'}, ['Текущий пароль', cur]), h('label', {'class':'f'}, ['Новый пароль (минимум 8 символов)', nw]), h('label', {'class':'f'}, ['Новый пароль ещё раз', nw2]),
+    h('button', {'class':'btn btn-main', type:'button', onclick: function(){
+      if (nw.value !== nw2.value) { out.textContent = 'Пароли не совпадают'; return; }
+      api('PUT', '/me/password', {current: cur.value, next: nw.value}).then(function(){ out.textContent = 'Пароль изменён ✓'; cur.value = nw.value = nw2.value = ''; })
+        .catch(function(e){ out.textContent = e.message; }); }}, ['Сменить пароль']), out]));
+}
+
+var start = (location.hash || '').slice(1);
+var allowed = U.sections.concat(U.users ? ['users'] : [], U.log ? ['log'] : [], ['me']);
+go(allowed.indexOf(start) >= 0 ? start : (U.sections[0] || 'me'));
+})();
+`;
+
+module.exports = { loginPage, appPage };

@@ -5,3 +5,4 @@ baseurl: "/kit-site"
 exclude:
   - README.md
   - deploy
+  - server-app
