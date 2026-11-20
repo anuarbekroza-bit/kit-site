@@ -4,3 +4,4 @@ url: "https://anuarbekroza-bit.github.io"
 baseurl: "/kit-site"
 exclude:
   - README.md
+  - deploy
