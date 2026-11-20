@@ -24,7 +24,7 @@ html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Manrope',system-ui,sans-serif}
 a{color:var(--ink)}a:hover{color:var(--accent)}
 img{max-width:100%;display:block}
-.wrap{max-width:1200px;margin:0 auto;padding:0 24px}
+.wrap{max-width:1200px;margin:0 auto;padding-left:24px;padding-right:24px}
 .h{font-family:'Unbounded',sans-serif;font-weight:700;margin:0}
 h2.h{font-size:36px}
 .btn{display:inline-flex;align-items:center;gap:8px;text-decoration:none;font-weight:700;font-size:16px;padding:14px 24px;border-radius:999px;min-height:44px}
@@ -75,9 +75,9 @@ nav a{text-decoration:none}
 .prod{flex:1 1 240px;display:flex;flex-direction:column;gap:12px}
 .prod img,.prod .ph{height:360px;width:100%;border-radius:20px;object-fit:cover;object-position:center 20%}
 .prod-name{font-weight:600;font-size:17px}
-.prod-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:auto}
-.price{font-family:'Unbounded',sans-serif;font-weight:700;font-size:18px}
-.price-ask{font-size:14px;font-weight:600;color:var(--muted)}
+.prod-row{display:flex;flex-direction:column;align-items:flex-start;gap:10px;margin-top:auto}
+.price{font-family:'Unbounded',sans-serif;font-weight:700;font-size:18px;min-height:23px}
+.price-ask{font-size:14px;font-weight:600;color:var(--muted);line-height:1.4;min-height:23px;display:flex;align-items:center}
 .order-btn{font-weight:700;font-size:15px;padding:10px 16px;border-radius:999px;background:var(--sky-l);text-decoration:none;min-height:44px;display:inline-flex;align-items:center;white-space:nowrap}
 /* steps */
 .steps{background:var(--ink);color:#fff;border-radius:32px;padding:56px 48px;display:flex;flex-direction:column;gap:36px}
@@ -96,7 +96,7 @@ nav a{text-decoration:none}
 .ig{flex:1 1 160px;aspect-ratio:4/5;border-radius:16px;overflow:hidden;display:block}
 .ig img{width:100%;height:100%;object-fit:cover}
 /* contacts */
-.contacts{display:flex;flex-wrap:wrap;gap:32px;padding-bottom:72px}
+.contacts{display:flex;flex-wrap:wrap;gap:32px;padding-bottom:80px}
 .c-left{flex:1 1 360px;display:flex;flex-direction:column;gap:24px}
 .c-item{display:flex;flex-direction:column;gap:6px}
 .c-item small{font-size:14px;font-weight:700;color:var(--muted)}
