@@ -6,13 +6,17 @@
 //    Когда проблема ушла — сообщение «снова в норме». Плюс ежедневный отчёт в 10:00 (по желанию).
 // Если приложение совсем упало, его перезапускает внешний сторож watchdog.js и пишет сюда же.
 //  • 🎤 Понимает голосовые и обычный текст по-русски и по-казахски: «как сервер?», «бэкап жаса»,
-//    «выключи утренний отчёт». Тот же ключ OpenAI, что и у бота магазина.
+//    «выключи утренний отчёт», «что было ночью?». Тот же ключ OpenAI, что и у бота магазина.
+//  • Отвечает голосом (настройки — в админке); тревоги — ещё и голосовым, чтобы не пропустить.
 const fs = require('fs');
 const os = require('os');
 const store = require('./db');
 const mon = require('./monitor');
 const { ROLES } = require('./schema');
 const voice = require('./voice');
+const tts = require('./tts');
+const assist = require('./assist');
+const capture = new Map();   // chatId -> тексты ответов на текущую команду (для ответа голосом)
 const MAX_VOICE_SEC = 90;
 
 const API = process.env.TG_API || 'https://api.telegram.org';
@@ -35,7 +39,19 @@ async function call(method, params, form) {
   if (!j.ok) throw Object.assign(new Error(j.description || 'Ошибка Telegram'), { tg: j });
   return j.result;
 }
-const say = (chat, text, markup) => call('sendMessage', { chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true, ...(markup ? { reply_markup: markup } : {}) });
+function say(chat, text, markup) {
+  const c = capture.get(String(chat));
+  if (c) c.push(text);
+  return call('sendMessage', { chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true, ...(markup ? { reply_markup: markup } : {}) });
+}
+function sendVoice(chat, audio, caption) {
+  const f = new FormData();
+  f.append('chat_id', String(chat));
+  if (caption) f.append('caption', caption);
+  if (audio.ogg) { f.append('voice', new Blob([audio.ogg], { type: 'audio/ogg' }), 'voice.ogg'); return call('sendVoice', null, f); }
+  f.append('audio', new Blob([audio.wav], { type: 'audio/wav' }), 'server.wav');
+  return call('sendAudio', null, f);
+}
 const edit = (msg, text, markup) => call('editMessageText', { chat_id: msg.chat.id, message_id: msg.message_id, text, parse_mode: 'HTML', reply_markup: markup || { inline_keyboard: [] } });
 
 async function downloadFile(fileId) {
@@ -162,11 +178,11 @@ function sayHelp(user, chat, lang) {
   if (lang === 'kk') return say(chat, `Сәлеметсіз бе, ${esc(user.name || user.login)}! Бұл «Кит» серверінің боты.\n\n` +
     '📊 <b>Статус</b> — сайт жұмыс істей ме, жад, диск, сертификат\n💾 <b>Бэкап</b> — базаның көшірмесін қазір жасау\n' +
     '📂 <b>Бэкапы</b> — соңғы көшірмелер\n🔔 <b>Уведомления</b> — дабылдар және күнделікті есеп' +
-    (v ? '\n\n🎤 Дауыспен де айтуға болады: «Сервер қалай?», «Бэкап жаса», «Таңғы есепті өшір».' : ''), MENU);
+    (v ? '\n\n🎤 Дауыспен де айтуға болады: «Сервер қалай?», «Түнде не болды?», «Бэкап жаса», «Таңғы есепті өшір».' : ''), MENU);
   return say(chat, `Здравствуйте, ${esc(user.name || user.login)}! Это бот сервера «Кит».\n\n` +
     '📊 <b>Статус</b> — работает ли сайт, память, диск, сертификат\n💾 <b>Бэкап</b> — сделать копию базы сейчас\n' +
     '📂 <b>Бэкапы</b> — последние копии\n🔔 <b>Уведомления</b> — тревоги и ежедневный отчёт' +
-    (v ? '\n\n🎤 Можно голосом или своими словами, по-русски или по-казахски: «Как сервер?», «Сделай бэкап», «Когда был последний бэкап?», «Выключи утренний отчёт».' : ''), MENU);
+    (v ? '\n\n🎤 Можно голосом или своими словами, по-русски или по-казахски: «Как сервер?», «Что было ночью?», «Сделай бэкап», «Когда был последний бэкап?», «Выключи утренний отчёт».' : ''), MENU);
 }
 
 // ---------- голосовое управление ----------
@@ -179,14 +195,29 @@ async function onVoice(user, chat, m) {
   if ((v.duration || 0) > MAX_VOICE_SEC || (v.file_size || 0) > 15 * 1024 * 1024)
     return say(chat, kk ? `Дауыстық хабар тым ұзын — қысқаша айтыңыз (${MAX_VOICE_SEC} секундқа дейін).` : `Слишком длинное голосовое — скажите коротко (до ${MAX_VOICE_SEC} секунд).`);
   const buf = await downloadFile(v.file_id);
-  return understandAndRun(user, chat, { audio: buf, mime: (v.mime_type || 'audio/ogg').split(';')[0] }, true);
+  return understandAndRun(user, chat, { audio: buf, mime: (v.mime_type || 'audio/ogg').split(';')[0], seconds: v.duration || 0 }, true);
 }
 
 async function understandAndRun(user, chat, inp, isVoice) {
   call('sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => {});
   const r = await voice.understandServer(inp, { flags: { alerts: !!user.alerts, daily: !!user.daily } });
   if (isVoice && r.transcript) await say(chat, `${r.lang === 'kk' ? '🎤 Естідім' : '🎤 Услышал'}: <i>${esc(r.transcript)}</i>`);
-  return runCommand(user, chat, r);
+  const jid = voice.journal.add({ bot: 'Мой сервер', user: user.login, kind: isVoice ? 'голос' : 'текст', heard: r.transcript, action: r.action });
+  const key = String(chat);
+  capture.set(key, []);
+  let replies = [];
+  try { await runCommand(user, chat, r); }
+  catch (e) { await say(chat, '⚠️ ' + esc(e.message), MENU); }
+  finally { replies = capture.get(key) || []; capture.delete(key); }
+  voice.journal.result(jid, replies.join(' | '));
+  if (tts.wantVoice(isVoice) && replies.length) await speak(chat, replies.slice(0, 3).join('\n'), tts.replyLang(r.lang));
+}
+
+async function speak(chat, html, lang) {
+  try {
+    call('sendChatAction', { chat_id: chat, action: 'record_voice' }).catch(() => {});
+    await sendVoice(chat, await tts.synth(html, { lang }));
+  } catch (e) { console.error('server voice reply:', e.message); }
 }
 
 async function setFlagSay(user, chat, flag, on, L) {
@@ -202,6 +233,11 @@ async function runCommand(user, chat, r) {
   switch (r.action) {
     case 'menu': return sayHelp(user, chat, L);
     case 'status': return sendStatus(chat);
+    case 'night_report': {
+      call('sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => {});
+      const snap = await mon.snapshot();
+      return say(chat, await assist.nightReport(r.hours || 12, L, snap, mon.problems(snap)), MENU);
+    }
     case 'backup': return doBackup(user, chat);
     case 'backups': return listBackups(user, chat);
     case 'send_backup': {
@@ -298,6 +334,15 @@ async function onCallback(cq) {
 }
 
 // ---------- мониторинг и тревоги ----------
+// тревога голосом — один раз озвучиваем, рассылаем всем
+async function voiceAlarm(text, chats) {
+  if (!chats.length || !voice.settings().alarm_voice || !voice.enabled() || voice.provider() !== 'openai') return;
+  try {
+    const a = await tts.synth('Внимание! ' + text, { lang: 'ru' });
+    for (const c of chats) await sendVoice(c, a).catch(() => {});
+  } catch (e) { console.error('voice alarm:', e.message); }
+}
+
 async function broadcast(text, flag = 'alerts') {
   let n = 0;
   for (const l of store.srv.links()) {
@@ -328,7 +373,13 @@ async function checkNow() {
   const fixed = [];
   for (const [k, v] of active) if (!seen.has(k)) { fixed.push(v.text); active.delete(k); }
   for (const k of strikes.keys()) if (!seen.has(k)) strikes.delete(k);
-  if (fresh.length) await broadcast('⚠️ <b>Проблема на сервере</b>\n\n' + fresh.map(esc).join('\n') + '\n\nНажмите «📊 Статус», чтобы посмотреть подробнее.');
+  for (const t of fresh) assist.events.add('problem', 'Проблема: ' + t);
+  for (const t of fixed) assist.events.add('fixed', 'Снова в норме: ' + t);
+  if (fresh.length) {
+    const msg = '⚠️ <b>Проблема на сервере</b>\n\n' + fresh.map(esc).join('\n') + '\n\nНажмите «📊 Статус», чтобы посмотреть подробнее.';
+    await broadcast(msg);
+    await voiceAlarm('Проблема на сервере. ' + fresh.join('. '), store.srv.links().filter(l => l.alerts && allowed(l)).map(l => l.chat_id));
+  }
   if (fixed.length) await broadcast('✅ <b>Снова в норме</b>\n\n' + fixed.map(t => '<s>' + esc(t) + '</s>').join('\n'));
 
   // ежедневный отчёт в 10:00 по Астане
@@ -351,6 +402,7 @@ function startMonitor() {
     setTimeout(async () => {
       if (status !== 'ok') return;
       const reboot = os.uptime() < 600;
+      assist.events.add('start', reboot ? 'Сервер перезагрузился, сайт запущен' : 'Сайт перезапущен (обновление или восстановление после сбоя)');
       await broadcast(reboot
         ? '🔄 <b>Сервер был перезагружен.</b> Сайт снова запущен ✅'
         : '🟢 <b>Сайт перезапущен</b> (обновление или восстановление после сбоя). Всё работает ✅').catch(() => {});
@@ -360,4 +412,4 @@ function startMonitor() {
 }
 function stopMonitor() { if (monitorTimer) clearInterval(monitorTimer); monitorTimer = null; }
 
-module.exports = { start, stop, configure, info, connectLink, checkNow, _test: { active, runCommand } };
+module.exports = { start, stop, configure, info, connectLink, checkNow, _test: { active, runCommand, voiceAlarm } };

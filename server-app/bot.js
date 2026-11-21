@@ -4,12 +4,16 @@
 //  • Товары можно менять с телефона: цена, рост, название, фото, показать/скрыть, удалить, добавить новый.
 //  • Голосом или обычным текстом на русском и казахском: «поставь цену на карго 13 500», «бомберді сайттан жасыр».
 //    Любое изменение бот сначала показывает и ждёт «✅ Да» — чтобы ошибка распознавания ничего не испортила.
+//  • Отвечает голосом (голос, язык, манера — в админке), товар по фото, ответ клиенту в WhatsApp,
+//    массовые правки, статистика, утренняя сводка, напоминания о заявках, посты для Instagram.
 // Работает в том же процессе, что сайт и админка: long polling, без внешних пакетов.
 // Токен бота вводится в админке (раздел «Telegram-бот») и хранится в базе.
 const store = require('./db');
 const images = require('./images');
 const { canEdit } = require('./schema');
 const voice = require('./voice');
+const tts = require('./tts');
+const assist = require('./assist');
 
 const API = process.env.TG_API || 'https://api.telegram.org';
 const SITE_URL = process.env.SITE_URL || 'https://kit.r-agent.kz';
@@ -26,6 +30,9 @@ const pending = new Map();   // chatId -> { step, id, field, draft }
 const planned = new Map();   // chatId -> { plan, at } — голосовая команда ждёт подтверждения
 const PLAN_TTL = 10 * 60 * 1000;
 const MAX_VOICE_SEC = 90;
+const capture = new Map();   // chatId -> тексты ответов на текущую команду (для ответа голосом)
+const lastClientMsg = new Map();   // chatId -> { orderId, phone, gist, lang } — «другой вариант» сообщения клиенту
+let timer = null;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -42,11 +49,26 @@ async function call(method, params, form) {
   return j.result;
 }
 
-const say = (chat, text, markup) => call('sendMessage', {
-  chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true, ...(markup ? { reply_markup: markup } : {}),
-});
+function say(chat, text, markup) {
+  const c = capture.get(String(chat));
+  if (c) c.push(text);
+  return call('sendMessage', { chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true, ...(markup ? { reply_markup: markup } : {}) });
+}
+
+// голосовое: OGG/Opus → «голосовое сообщение», без ffmpeg — WAV как аудиофайл
+function sendVoice(chat, audio, caption) {
+  const f = new FormData();
+  f.append('chat_id', String(chat));
+  if (caption) f.append('caption', caption);
+  if (audio.ogg) { f.append('voice', new Blob([audio.ogg], { type: 'audio/ogg' }), 'voice.ogg'); return call('sendVoice', null, f); }
+  f.append('audio', new Blob([audio.wav], { type: 'audio/wav' }), 'kit.wav');
+  f.append('title', 'Кит');
+  return call('sendAudio', null, f);
+}
 
 function sendPhoto(chat, buf, caption, markup) {
+  const c = capture.get(String(chat));
+  if (c) c.push(caption);
   const f = new FormData();
   f.append('chat_id', String(chat));
   f.append('caption', caption);
@@ -85,7 +107,7 @@ async function start() {
   username = store.meta.get('bot_username');
   pending.clear();
   planned.clear();
-  if (!token) { status = 'off'; lastError = ''; return info(); }
+  if (!token) { status = 'off'; lastError = ''; stopTimer(); return info(); }
   status = 'starting';
   try {
     const me = await call('getMe');
@@ -98,6 +120,7 @@ async function start() {
       { command: 'products', description: 'Товары' },
       { command: 'new', description: 'Добавить товар' },
       { command: 'orders', description: 'Открытые заявки' },
+      { command: 'summary', description: 'Сводка: заявки и что доделать' },
       { command: 'cancel', description: 'Отменить действие' },
     ] }).catch(() => {});
     status = 'ok'; lastError = '';
@@ -109,6 +132,7 @@ async function start() {
     return info();
   }
   loop(my);
+  startTimer();
   return info();
 }
 
@@ -141,7 +165,7 @@ async function configure(newToken) {
   return start();
 }
 
-function stop() { generation++; status = 'off'; }
+function stop() { generation++; status = 'off'; stopTimer(); }
 
 function info() { return { status, username, lastError, hasToken: !!store.meta.get('bot_token') }; }
 
@@ -168,7 +192,7 @@ function cardKb(p) {
     [{ text: '💰 Цена', callback_data: `e:${p.id}:price` }, { text: '📏 Рост', callback_data: `e:${p.id}:sizes` }],
     [{ text: '✏️ Название', callback_data: `e:${p.id}:name_ru` }, { text: '🖼 Фото', callback_data: `e:${p.id}:image` }],
     [{ text: p.show ? '🙈 Скрыть с сайта' : '👁 Показать на сайте', callback_data: `t:${p.id}` }, { text: '🗑 Удалить', callback_data: `d:${p.id}` }],
-    [{ text: '⬅️ Все товары', callback_data: 'list' }],
+    [{ text: '📸 Пост для Instagram', callback_data: `ig:${p.id}` }, { text: '⬅️ Все товары', callback_data: 'list' }],
   ] };
 }
 
@@ -221,6 +245,11 @@ async function handle(up) {
   if (m.voice || m.audio) return onVoice(user, chat, m).catch(e => say(chat, '⚠️ ' + esc(e.message)));
 
   const st = pending.get(chat);
+  // фото без вопроса от бота — новый товар (или новое фото для товара) по описанию голосом/подписью
+  const isPhoto = !!(m.photo || (m.document && /^image\//.test(m.document.mime_type || '')));
+  if (isPhoto && !(st && (st.field === 'image' || st.step === 'new_photo')) && voice.enabled() && mayEditProducts(user)) {
+    return onPhoto(user, chat, m, text).catch(e => say(chat, '⚠️ ' + esc(e.message), MENU));
+  }
   const isMenu = ['📦 Товары', '➕ Новый товар', '📨 Заявки', '🌐 Сайт'].includes(text) || text.startsWith('/');
   if (isMenu) planned.delete(chat);
   if (st && !isMenu) return input(user, chat, m, text, st).catch(e => say(chat, '⚠️ ' + esc(e.message), CANCEL));
@@ -229,6 +258,7 @@ async function handle(up) {
   if (text === '📦 Товары' || text === '/products') return listProducts(user, chat);
   if (text === '➕ Новый товар' || text === '/new') return newProduct(user, chat);
   if (text === '📨 Заявки' || text === '/orders') return listOrders(chat);
+  if (text === '/summary') return say(chat, assist.summaryHtml('ru'), summaryKb(user));
   if (text === '🌐 Сайт') return say(chat, `Сайт: ${SITE_URL}\nАдминка: ${ADMIN_URL}`, MENU);
   // обычный текст своими словами — тоже понимаем, если включено голосовое управление
   if (text && !text.startsWith('/') && voice.enabled()) {
@@ -241,11 +271,11 @@ function sayHelp(user, chat, lang) {
   if (lang === 'kk') return say(chat, `Сәлеметсіз бе, ${esc(user.name || user.login)}! Төмендегі батырмаларды басыңыз` +
     (voice.enabled() ? ' немесе дауыстық хабар жіберіңіз 🎤' : '') + '.\n\n' +
     '📦 <b>Товары</b> — баға, бой, сурет, жасыру не өшіру\n➕ <b>Новый товар</b> — сайтқа жаңа тауар қосу\n📨 <b>Заявки</b> — сайттан келген өтінімдер' +
-    (voice.enabled() ? '\n\n🎤 Мысалы: «Карго шалбардың бағасы он үш мың бес жүз», «Бомберді сайттан жасыр», «Өтінімдерді көрсет».' : ''), MENU);
+    (voice.enabled() ? '\n\n🎤 Мысалы:\n• «Карго шалбардың бағасы он үш мың бес жүз», «Бомберді сайттан жасыр»\n• 📷 сурет + «Қысқы куртка, 18 900, 110–140» — жаңа тауар\n• «12-өтінімдегі клиентке куртка бар деп жаз»\n• «Барлық курткаларға 10% жеңілдік»\n• «Аптада қанша өтінім болды?», «Есеп бер»\n• «Карго туралы инстаграмға пост жаса»' : ''), MENU);
   return say(chat, `Здравствуйте, ${esc(user.name || user.login)}! Выберите действие кнопками внизу` +
     (voice.enabled() ? ' или просто скажите голосом 🎤 (по-русски или по-казахски)' : '') + '.\n\n' +
     '📦 <b>Товары</b> — изменить цену, рост, фото, скрыть или удалить\n➕ <b>Новый товар</b> — добавить на сайт с телефона\n📨 <b>Заявки</b> — открытые заявки с сайта' +
-    (voice.enabled() ? '\n\n🎤 Например: «Поставь цену на брюки карго 13 500», «Бомбер закончился, скрой с сайта», «Добавь товар: шапка зимняя, 5 900, на 3–7 лет», «Заявку 12 в работу», «Покажи заявки».' : ''), MENU);
+    (voice.enabled() ? '\n\n🎤 Например:\n• «Поставь цену на брюки карго 13 500», «Бомбер закончился, скрой с сайта»\n• 📷 фото + «Куртка зимняя, 18 900, на 110–140» — новый товар\n• «Напиши клиенту из заявки 12, что куртка есть»\n• «Скидка 10% на все куртки»\n• «Сколько заявок за неделю?», «Дай сводку»\n• «Сделай пост в инстаграм про карго»' : ''), MENU);
 }
 
 async function guest(chat) {
@@ -261,6 +291,7 @@ async function connect(m, code) {
   if (!u) return say(chat, 'Ссылка для подключения устарела или уже использована.\nОткройте админку → «Telegram-бот» → «Подключить мой Telegram» и нажмите новую ссылку.');
   const tgName = [m.from && m.from.first_name, m.from && m.from.last_name].filter(Boolean).join(' ') + (m.from && m.from.username ? ' @' + m.from.username : '');
   store.tg.link(chat, u.id, tgName.trim());
+  store.tg.setFlag(chat, 'daily', true);   // утренняя сводка — по умолчанию включена
   store.log.add(u.login, 'подключил Telegram' + (tgName ? ' (' + tgName.trim() + ')' : ''));
   return say(chat, `✅ Готово, ${esc(u.name || u.login)}! Telegram подключён к админке «Кит».\n\n` +
     'Сюда будут приходить заявки с сайта. А товары можно менять кнопками внизу.\nОтключить: /stop', MENU);
@@ -332,6 +363,8 @@ const FIELD_WORD = { price: 'цену', sizes: 'рост', name_ru: 'назва�
 
 async function input(user, chat, m, text, st) {
   if (!mayEditProducts(user)) { pending.delete(chat); return say(chat, 'У вас нет доступа к товарам.', MENU); }
+  // описание к присланному фото (текстом)
+  if (st.step === 'photo_desc') return understandAndRun(user, chat, { text, image: st.image }, false);
 
   // изменение одного поля товара
   if (st.step === 'edit') {
@@ -443,6 +476,23 @@ async function onCallback(cq) {
     if (data === 'vy') return execPlan(user, chat, pl.plan, pl.lang);
     return;
   }
+  if (data === 'sumoff' || data === 'sumon') {
+    store.tg.setFlag(chat, 'daily', data === 'sumon');
+    await answer(data === 'sumon' ? 'Сводка включена' : 'Сводка выключена');
+    return say(chat, data === 'sumon' ? '☀️ Утренняя сводка включена — каждый день в ' + voice.settings().summary_time + '.' : '🔕 Утреннюю сводку больше не присылаю. Включить: скажите «включи утреннюю сводку».', MENU);
+  }
+  if (data === 'cmr') {
+    const lc = lastClientMsg.get(chat);
+    await answer(lc ? 'Пишу другой вариант…' : 'Устарело');
+    if (lc) return sendClientMessage(chat, lc).catch(e => say(chat, '⚠️ ' + esc(e.message), MENU));
+    return;
+  }
+  if ((m = /^ig:(\d+)$/.exec(data))) {
+    await answer('Пишу пост…');
+    const p = store.getItem('products', m[1]);
+    if (p) return sendInstagram(chat, p, '').catch(e => say(chat, '⚠️ ' + esc(e.message), MENU));
+    return;
+  }
   if (data === 'list') { await answer(); return listProducts(user, chat, msg); }
   if (data === 'new') { await answer(); return newProduct(user, chat); }
 
@@ -533,6 +583,25 @@ const TEXTS = {
       `\n💰 ${d.price ? d.price + ' ₸' : 'без цены'}\n📏 ${d.sizes || 'рост не указан'}`,
     order: (id, s) => `📨 Заявка №${id} → <b>${s}</b>`,
     st: { work: 'В работе', done: 'Выполнена', cancel: 'Отменена' },
+    photoGot: '📷 Фото получено. Скажите голосом или напишите, что это за товар: название, цену, рост. Например: «Куртка зимняя, 18 900, на 110–140».\nИли: «это новое фото для бомбера».',
+    newPhoto: n => `🖼 Поставить новое фото для «${n}»`,
+    withPhoto: '\n🖼 с этим фото',
+    bulk: (n, list, more) => `🔁 Изменить ${n} товар(ов):\n${list}${more ? `\n…и ещё ${more}` : ''}`,
+    bulkSkipped: list => `\n\nНе меняю (нет цены или уже так): ${list}`,
+    bulkNone: 'Не нашёл товаров, которые подходят под это. Назовите точнее, например «все куртки».',
+    bulkNothing: 'Менять нечего — у этих товаров уже так.',
+    bulkBad: 'Не понял, на сколько менять. Скажите, например: «скидка 10% на все куртки».',
+    bulkRound: '\n<i>Цены округлены до 100 ₸.</i>',
+    bulkDone: n => `✅ Изменено товаров: ${n} — уже на сайте.`,
+    cmFor: (name, phone) => `💬 Сообщение для <b>${name}</b>${phone ? ' (+' + phone + ')' : ''}:`,
+    cmOpen: '💬 Открыть WhatsApp с этим текстом', cmAgain: '🔄 Другой вариант',
+    cmNoClient: 'Кому написать? Скажите номер заявки («клиенту из заявки 12») или номер телефона.',
+    cmHint: '<i>Бот сам не отправляет — нажмите кнопку, проверьте текст в WhatsApp и отправьте.</i>',
+    igFor: n => `📸 Пост для Instagram — «${n}». Нажмите на текст ниже, чтобы скопировать:`,
+    sumOn: t => `☀️ Утренняя сводка включена — каждый день в ${t}.`,
+    sumOff: '🔕 Утреннюю сводку больше не присылаю.',
+    remind: (id, mins) => `⏰ <b>Заявка №${id} ждёт уже ${mins >= 60 ? Math.round(mins / 6) / 10 + ' ч' : mins + ' мин'}</b> — никто не взял в работу.`,
+    noVoiceKey: 'Ответ голосом работает только с ключом OpenAI.',
   },
   kk: {
     heard: '🎤 Естідім', confirm: 'Растайсыз ба?', yes: '✅ Иә', no: '✖️ Жоқ', nothing: 'Жақсы, ештеңе өзгертпеймін.',
@@ -562,6 +631,25 @@ const TEXTS = {
       `\n💰 ${d.price ? d.price + ' ₸' : 'бағасыз'}\n📏 ${d.sizes || 'бойы көрсетілмеген'}`,
     order: (id, s) => `📨 №${id} өтінім → <b>${s}</b>`,
     st: { work: 'Жұмыста', done: 'Орындалды', cancel: 'Жойылды' },
+    photoGot: '📷 Сурет келді. Бұл қандай тауар екенін дауыспен айтыңыз не жазыңыз: атауы, бағасы, бойы. Мысалы: «Қысқы куртка, 18 900, 110–140».\nНемесе: «бұл бомбердің жаңа суреті».',
+    newPhoto: n => `🖼 «${n}» үшін жаңа сурет қою`,
+    withPhoto: '\n🖼 осы суретпен',
+    bulk: (n, list, more) => `🔁 ${n} тауарды өзгерту:\n${list}${more ? `\n…және тағы ${more}` : ''}`,
+    bulkSkipped: list => `\n\nӨзгертпеймін (бағасы жоқ не бұрыннан солай): ${list}`,
+    bulkNone: 'Бұған сәйкес тауар таппадым. Нақтырақ айтыңыз, мысалы «барлық курткалар».',
+    bulkNothing: 'Өзгертетін ештеңе жоқ — бұл тауарларда бұрыннан солай.',
+    bulkBad: 'Қаншаға өзгерту керек екенін түсінбедім. Мысалы: «барлық курткаларға 10% жеңілдік».',
+    bulkRound: '\n<i>Бағалар 100 ₸-ге дейін дөңгелектенді.</i>',
+    bulkDone: n => `✅ ${n} тауар өзгертілді — сайтта жаңарды.`,
+    cmFor: (name, phone) => `💬 <b>${name}</b>${phone ? ' (+' + phone + ')' : ''} үшін хабарлама:`,
+    cmOpen: '💬 WhatsApp-та ашу', cmAgain: '🔄 Басқа нұсқа',
+    cmNoClient: 'Кімге жазамыз? Өтінім нөмірін («12-өтінімдегі клиентке») не телефон нөмірін айтыңыз.',
+    cmHint: '<i>Бот өзі жібермейді — батырманы басып, WhatsApp-та мәтінді тексеріп, жіберіңіз.</i>',
+    igFor: n => `📸 Instagram-ға пост — «${n}». Көшіру үшін төмендегі мәтінді басыңыз:`,
+    sumOn: t => `☀️ Таңғы есеп қосылды — күн сайын ${t}-де.`,
+    sumOff: '🔕 Таңғы есепті енді жібермеймін.',
+    remind: (id, mins) => `⏰ <b>№${id} өтінім ${mins >= 60 ? Math.round(mins / 6) / 10 + ' сағ' : mins + ' мин'} күтіп тұр</b> — ешкім жұмысқа алмады.`,
+    noVoiceKey: 'Дауыспен жауап тек OpenAI кілтімен жұмыс істейді.',
   },
 };
 function T(lang, key, ...a) { const t = (TEXTS[lang] || TEXTS.ru)[key]; return typeof t === 'function' ? t(...a) : t; }
@@ -575,6 +663,7 @@ function awaitingText(st) {
     edit: { price: 'новую цену' + n, sizes: 'рост' + n, name_ru: 'новое русское название' + n, name_kk: 'новое казахское название' + n, image: 'фото' + n }[st.field],
     new_name: 'название нового товара', new_price: 'цену нового товара (можно пропустить)',
     new_sizes: 'рост нового товара (можно пропустить)', new_photo: 'фото нового товара (можно пропустить)',
+    photo_desc: 'описание товара на присланном фото (название, цена, рост) — это add_product; или для какого товара это новое фото — set_photo',
   }[st.step] || '';
 }
 
@@ -587,21 +676,50 @@ async function onVoice(user, chat, m) {
   call('sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => {});
   const buf = await downloadFile(v.file_id, 'голосовое');
   const mime = (v.mime_type || 'audio/ogg').split(';')[0];
-  return understandAndRun(user, chat, { audio: buf, mime }, true);
+  return understandAndRun(user, chat, { audio: buf, mime, seconds: v.duration || 0 }, true);
+}
+
+// фото: с подписью — сразу разбираем подпись; без подписи — спрашиваем, что это
+async function onPhoto(user, chat, m, caption) {
+  const buf = await downloadPhoto(m);
+  if (!buf) return;
+  if (caption) return understandAndRun(user, chat, { text: caption, image: buf }, false);
+  const lang = m.from && m.from.language_code === 'kk' ? 'kk' : 'ru';
+  pending.set(chat, { step: 'photo_desc', image: buf });
+  return say(chat, T(lang, 'photoGot'), CANCEL);
 }
 
 async function understandAndRun(user, chat, inp, isVoice) {
   if (!isVoice) call('sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => {});
   const st = pending.get(chat);
   const pl = planned.get(chat);
+  if (st && st.step === 'photo_desc' && !inp.image) inp = { ...inp, image: st.image };
   const products = store.getSection('products');
   const orders = store.orders.list(15, true).map(o => ({ id: o.id, name: o.name, product: o.product, status: store.ORDER_STATUS[o.status] || o.status }));
   const r = await voice.understand(inp, {
     products, orders, awaiting: awaitingText(st),
     confirming: pl && Date.now() - pl.at < PLAN_TTL ? describe(pl.plan, 'ru').replace(/<[^>]+>/g, '') : '',
   });
+  r.image = inp.image || null;
   if (isVoice && r.transcript) await say(chat, `${T(r.lang, 'heard')}: <i>${esc(r.transcript)}</i>`);
-  return runCommand(user, chat, r, isVoice);
+  const jid = voice.journal.add({ bot: 'Кит', user: user.login, kind: isVoice ? 'голос' : inp.image ? 'фото' : 'текст', heard: r.transcript, action: r.action });
+  const key = String(chat);
+  capture.set(key, []);
+  let replies = [];
+  try { await runCommand(user, chat, r, isVoice); }
+  catch (e) { await say(chat, '⚠️ ' + esc(e.message), MENU); }
+  finally { replies = capture.get(key) || []; capture.delete(key); }
+  voice.journal.result(jid, replies.join(' | '));
+  if (tts.wantVoice(isVoice) && replies.length) await speak(chat, replies.slice(0, 4).join('\n'), tts.replyLang(r.lang));
+}
+
+// озвучить ответ; ошибки голоса не мешают — текст уже отправлен
+async function speak(chat, html, lang) {
+  try {
+    call('sendChatAction', { chat_id: chat, action: 'record_voice' }).catch(() => {});
+    const a = await tts.synth(html, { lang });
+    await sendVoice(chat, a);
+  } catch (e) { console.error('voice reply:', e.message); }
 }
 
 const PRODUCT_ACTIONS = new Set(['list_products', 'show_product', 'set_price', 'clear_price', 'set_sizes', 'set_name_ru', 'set_name_kk', 'set_photo', 'hide', 'show', 'delete', 'add_product']);
@@ -627,6 +745,10 @@ async function runCommand(user, chat, r, isVoice) {
 
   // ответ на вопрос, который бот задал (цена, рост, название…)
   if (st && (r.action === 'answer' || r.action === 'skip' || r.action === 'unknown')) {
+    if (st.step === 'photo_desc') {
+      if (r.action === 'skip') { pending.delete(chat); return say(chat, T(L, 'nothing'), MENU); }
+      return say(chat, r.reply ? esc(r.reply) : T(L, 'photoGot'), CANCEL);
+    }
     if (st.field === 'image' || st.step === 'new_photo') {
       if (r.action === 'skip' && st.step === 'new_photo') return input(user, chat, {}, '-', st);
       return say(chat, T(L, 'waitPhoto'), st.step === 'new_photo' ? SKIP : CANCEL);
@@ -641,7 +763,7 @@ async function runCommand(user, chat, r, isVoice) {
   if (st) pending.delete(chat);   // сказали новую команду — старый вопрос забываем
   planned.delete(chat);
 
-  if (PRODUCT_ACTIONS.has(r.action) && !mayEditProducts(user)) return say(chat, T(L, 'noAccess'), MENU);
+  if ((PRODUCT_ACTIONS.has(r.action) || ['bulk', 'instagram'].includes(r.action)) && !mayEditProducts(user)) return say(chat, T(L, 'noAccess'), MENU);
 
   const findProduct = async () => {
     const p = r.product_id ? store.getItem('products', r.product_id) : null;
@@ -684,6 +806,7 @@ async function runCommand(user, chat, r, isVoice) {
     }
     case 'set_photo':
       if (!(p = await findProduct())) return;
+      if (r.image) return ask({ kind: 'field', id: p.id, field: 'image', value: r.image, via });
       pending.set(chat, { step: 'edit', id: p.id, field: 'image' });
       return say(chat, `«${esc(p.name_ru)}»\n${T(L, 'photo')}`, CANCEL);
     case 'hide':
@@ -699,8 +822,32 @@ async function runCommand(user, chat, r, isVoice) {
       const pr = r.value && r.value !== r.name_ru ? parseField('price', r.value) : { value: '' };
       const sz = r.sizes ? parseField('sizes', r.sizes) : { value: '' };
       const kk = r.name_kk ? parseField('name_kk', r.name_kk) : { value: '' };
-      return ask({ kind: 'add', draft: { name_ru: n.value, name_kk: kk.error ? '' : kk.value, price: pr.error ? '' : pr.value, sizes: sz.error ? '' : sz.value }, via });
+      return ask({ kind: 'add', draft: { name_ru: n.value, name_kk: kk.error ? '' : kk.value, price: pr.error ? '' : pr.value, sizes: sz.error ? '' : sz.value }, image: r.image, via });
     }
+    case 'bulk': {
+      const b = assist.bulkChanges(r.product_ids, r.bulk_op, r.value);
+      if (b.error === 'none') return say(chat, T(L, 'bulkNone'), MENU);
+      if (b.error) return say(chat, T(L, 'bulkBad'), MENU);
+      if (!b.changes.length) return say(chat, T(L, 'bulkNothing'), MENU);
+      return ask({ kind: 'bulk', changes: b.changes, skipped: b.skipped, op: r.bulk_op, via });
+    }
+    case 'client_message': {
+      const o = r.order_id ? store.orders.byId(r.order_id) : null;
+      const phone = o ? o.phone : String(r.phone || '').replace(/\D/g, '').replace(/^8(?=\d{10}$)/, '7');
+      if (!o && !/^\d{10,15}$/.test(phone)) return say(chat, T(L, 'cmNoClient'), MENU);
+      return sendClientMessage(chat, { orderId: o ? o.id : 0, phone, gist: r.value || r.transcript, lang: r.message_lang || L });
+    }
+    case 'stats':
+      call('sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => {});
+      return say(chat, await assist.answerStats(r.transcript, L), MENU);
+    case 'summary': return say(chat, assist.summaryHtml(L), summaryKb(user, chat));
+    case 'summary_on':
+    case 'summary_off':
+      store.tg.setFlag(chat, 'daily', r.action === 'summary_on');
+      return say(chat, r.action === 'summary_on' ? T(L, 'sumOn', voice.settings().summary_time) : T(L, 'sumOff'), MENU);
+    case 'instagram':
+      if (!(p = await findProduct())) return;
+      return sendInstagram(chat, p, r.message_lang);
     case 'order_status': {
       if (!r.order_id || !r.order_status) return say(chat, T(L, 'noOrder'), MENU);
       const o = store.orders.byId(r.order_id);
@@ -713,12 +860,18 @@ async function runCommand(user, chat, r, isVoice) {
 }
 
 function describe(plan, L) {
-  if (plan.kind === 'add') return T(L, 'add', { ...plan.draft, name_ru: esc(plan.draft.name_ru), name_kk: esc(plan.draft.name_kk) });
+  if (plan.kind === 'add') return T(L, 'add', { ...plan.draft, name_ru: esc(plan.draft.name_ru), name_kk: esc(plan.draft.name_kk) }) + (plan.image ? T(L, 'withPhoto') : '');
+  if (plan.kind === 'bulk') {
+    const lines = plan.changes.slice(0, 25).map(c => `• ${esc(c.name)}: ${esc(c.before)} → <b>${esc(c.after)}</b>`).join('\n');
+    return T(L, 'bulk', plan.changes.length, lines, Math.max(0, plan.changes.length - 25)) +
+      (plan.op === 'price_percent' ? T(L, 'bulkRound') : '') + (plan.skipped && plan.skipped.length ? T(L, 'bulkSkipped', plan.skipped.slice(0, 10).map(esc).join(', ')) : '');
+  }
   if (plan.kind === 'order') return T(L, 'order', plan.id, T(L, 'st')[plan.value]);
   const p = store.getItem('products', plan.id);
   const n = esc(p ? p.name_ru : '?');
   if (plan.kind === 'show') return plan.value ? T(L, 'show', n) : T(L, 'hide', n);
   if (plan.kind === 'delete') return T(L, 'del', n);
+  if (plan.field === 'image') return T(L, 'newPhoto', n);
   const val = esc(plan.value);
   return { price: plan.value ? T(L, 'price', n, val) : T(L, 'clearPrice', n), sizes: T(L, 'sizes', n, val), name_ru: T(L, 'nameRu', n, val), name_kk: T(L, 'nameKk', n, val) }[plan.field];
 }
@@ -740,12 +893,23 @@ async function execPlan(user, chat, plan, L) {
   if (!mayEditProducts(user)) return say(chat, T(L, 'noAccess'), MENU);
   if (plan.kind === 'add') {
     store.backup();
-    const id = store.insertItem('products', { ...plan.draft, show: true }, true);
+    const d = { ...plan.draft, show: true };
+    if (plan.image) d.image = images.saveImageBuffer(plan.image);
+    const id = store.insertItem('products', d, true);
     onChange();
-    store.log.add(user.login, `через Telegram (${plan.via}): добавил(а) товар «${plan.draft.name_ru}»`);
-    pending.set(chat, { step: 'edit', id, field: 'image' });
+    store.log.add(user.login, `через Telegram (${plan.via}): добавил(а) товар «${plan.draft.name_ru}»` + (plan.image ? ' с фото' : ''));
     await say(chat, T(L, 'added'), MENU);
+    if (plan.image) return showProduct(chat, id);
+    pending.set(chat, { step: 'edit', id, field: 'image' });
     return say(chat, T(L, 'photo'), CANCEL);
+  }
+  if (plan.kind === 'bulk') {
+    store.backup();
+    let n = 0;
+    for (const c of plan.changes) if (store.getItem('products', c.id)) { store.updateItem('products', c.id, c.fields); n++; }
+    onChange();
+    store.log.add(user.login, `через Telegram (${plan.via}): массово изменил(а) ${n} товар(ов): ` + plan.changes.slice(0, 8).map(c => `${c.name} ${c.before}→${c.after}`).join('; '));
+    return say(chat, T(L, 'bulkDone', n), MENU);
   }
   const p = store.getItem('products', plan.id);
   if (!p) return say(chat, 'Этого товара уже нет.', MENU);
@@ -757,14 +921,98 @@ async function execPlan(user, chat, plan, L) {
     return say(chat, `🗑 «${esc(p.name_ru)}» ✅`, MENU);
   }
   if (plan.kind === 'show') save(user, p.id, { show: plan.value }, `(${plan.via}) ` + (plan.value ? 'вернул(а) на сайт товар' : 'скрыл(а) с сайта товар'));
+  else if (plan.field === 'image') save(user, p.id, { image: images.saveImageBuffer(plan.value) }, `(${plan.via}) поменял(а) фото у товара`);
   else save(user, p.id, { [plan.field]: plan.value }, `(${plan.via}) изменил(а) ${FIELD_WORD[plan.field]}` +
     (plan.field === 'price' ? ` (${p.price || '—'} → ${plan.value || '—'})` : '') + ' у товара');
   await say(chat, T(L, 'saved'), MENU);
   return showProduct(chat, p.id);
 }
 
+// ---------- сообщение клиенту (WhatsApp) ----------
+async function sendClientMessage(chat, req) {
+  call('sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => {});
+  const o = req.orderId ? store.orders.byId(req.orderId) : { name: '', phone: req.phone, product: '', comment: '' };
+  const text = await assist.clientMessage(o, req.gist, req.lang);
+  lastClientMsg.set(chat, req);
+  const L = req.lang === 'kk' ? 'kk' : 'ru';
+  return say(chat, `${T(L, 'cmFor', esc(o.name || 'клиента'), o.phone)}\n\n${esc(text)}\n\n${T(L, 'cmHint')}`, { inline_keyboard: [
+    [{ text: T(L, 'cmOpen'), url: `https://wa.me/${o.phone}?text=${encodeURIComponent(text)}` }],
+    [{ text: T(L, 'cmAgain'), callback_data: 'cmr' }],
+  ] });
+}
+
+// ---------- пост для Instagram ----------
+async function sendInstagram(chat, p, lang) {
+  call('sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => {});
+  const text = await assist.instagramPost(p, lang);
+  const L = lang === 'kk' ? 'kk' : 'ru';
+  await say(chat, T(L, 'igFor', esc(p.name_ru)));
+  return say(chat, `<code>${esc(text)}</code>`, MENU);   // <code> — копируется одним нажатием
+}
+
+// ---------- утренняя сводка и напоминания ----------
+function summaryKb(user, chat) {
+  const on = chat ? !!(store.tg.userByChat(chat) || {}).daily : true;
+  return { inline_keyboard: [[on ? { text: '🔕 Не присылать утром', callback_data: 'sumoff' } : { text: '☀️ Присылать каждое утро', callback_data: 'sumon' }]] };
+}
+
+store.db.exec('CREATE TABLE IF NOT EXISTS order_reminders (order_id INTEGER PRIMARY KEY, at TEXT NOT NULL DEFAULT (datetime(\'now\')))');
+
+async function tick() {
+  if (status !== 'ok') return;
+  const s = voice.settings();
+  const now = Date.now();
+  const al = assist.almaty(now);
+  const hour = al.getUTCHours();
+  const links = store.tg.links();
+
+  // напоминание о новых заявках, которые давно никто не взял (днём, 9:00–21:00)
+  if (s.remind_after && hour >= 9 && hour < 21) {
+    const done = new Set(store.db.prepare('SELECT order_id FROM order_reminders').all().map(r => r.order_id));
+    for (const o of store.orders.list(50, true)) {
+      if (o.status !== 'new' || done.has(o.id)) continue;
+      const mins = Math.round((now - Date.parse(String(o.at).replace(' ', 'T') + 'Z')) / 60000);
+      if (mins < s.remind_after || mins > 48 * 60) continue;   // старше 2 суток — не напоминаем
+      store.db.prepare('INSERT OR IGNORE INTO order_reminders (order_id) VALUES (?)').run(o.id);
+      for (const l of links) await say(l.chat_id, T('ru', 'remind', o.id, mins) + '\n\n' + orderText(o), orderKb(o)).catch(() => {});
+    }
+  }
+
+  // утренняя сводка — один раз в день, в настроенное время (если сервер спал — в течение 3 часов после)
+  const day = al.toISOString().slice(0, 10);
+  const [th, tm] = s.summary_time.split(':').map(Number);
+  const late = hour * 60 + al.getUTCMinutes() - (th * 60 + tm);
+  if (late >= 0 && late < 180 && store.meta.get('shop_summary_last') !== day) {
+    store.meta.set('shop_summary_last', day);
+    const html = assist.summaryHtml('ru');
+    for (const l of links.filter(x => x.daily)) {
+      await say(l.chat_id, html, { inline_keyboard: [[{ text: '🔕 Не присылать утром', callback_data: 'sumoff' }]] }).catch(() => {});
+      if (s.reply_mode !== 'never' && tts.wantVoice(true)) await speak(l.chat_id, html, s.reply_lang === 'kk' ? 'kk' : 'ru');
+    }
+  }
+}
+function startTimer() {
+  if (timer) return;
+  // при первом запуске новой версии: утренняя сводка включена у всех уже подключённых
+  if (!store.meta.get('shop_summary_init')) { store.meta.set('shop_summary_init', '1'); for (const l of store.tg.links()) store.tg.setFlag(l.chat_id, 'daily', true); }
+  timer = setInterval(() => tick().catch(e => console.error('bot tick:', e.message)), Number(process.env.KIT_TICK_MS) || 60 * 1000);
+  timer.unref();
+}
+function stopTimer() { if (timer) clearInterval(timer); timer = null; }
+
+// пробное голосовое из админки — в Telegram этого сотрудника
+async function testVoice(userId, lang) {
+  const chats = store.tg.links().filter(l => l.user_id === userId);
+  if (!chats.length) throw Object.assign(new Error('Ваш Telegram не подключён к боту «Кит» — нажмите «Подключить мой Telegram» выше.'), { code: 400 });
+  if (status !== 'ok') throw Object.assign(new Error('Бот «Кит» сейчас не работает'), { code: 400 });
+  const text = lang === 'kk' ? 'Сәлеметсіз бе! Мен «Кит» дүкенінің көмекшісімін. Дауысым осылай естіледі.' : 'Здравствуйте! Я помощник магазина «Кит». Вот так звучит мой голос.';
+  const a = await tts.synth(text, { lang });
+  for (const l of chats) await sendVoice(l.chat_id, a, '🎤 Проба голоса: ' + voice.settings().voice);
+  return chats.length;
+}
+
 module.exports = {
-  start, stop, configure, info, connectLink, notifyOrder,
+  start, stop, configure, info, connectLink, notifyOrder, testVoice,
   setOnChange: fn => { onChange = fn; },
-  _test: { parseField, orderText, cardText, runCommand, describe },
+  _test: { parseField, orderText, cardText, runCommand, describe, tick },
 };

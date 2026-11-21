@@ -13,6 +13,7 @@ const ui = require('./admin-ui');
 const images = require('./images');
 const bot = require('./bot');
 const voice = require('./voice');
+const tts = require('./tts');
 const srvBot = require('./server-bot');
 const mon = require('./monitor');
 
@@ -270,7 +271,7 @@ async function admin(req, res, url) {
 
   if (p === '/admin/api/bot' && req.method === 'GET') {
     const links = store.tg.links().filter(l => role.users || l.user_id === sess.id)
-      .map(l => ({ chat_id: l.chat_id, tg_name: l.tg_name, login: l.login, name: l.name, created_at: l.created_at }));
+      .map(l => ({ chat_id: l.chat_id, tg_name: l.tg_name, login: l.login, name: l.name, created_at: l.created_at, daily: !!l.daily }));
     return json(res, 200, { ...bot.info(), canConfigure: !!role.users, links, voice: voice.info() });
   }
   if (p === '/admin/api/bot/voice' && req.method === 'PUT') {
@@ -292,6 +293,48 @@ async function admin(req, res, url) {
     if (!url) return json(res, 400, { error: 'Бот ещё не подключён. Владелец должен вставить токен бота.' });
     return json(res, 200, { url });
   }
+  if ((m = /^\/admin\/api\/bot\/links\/(-?\d+)$/.exec(p)) && req.method === 'PUT') {
+    const l = store.tg.links().find(x => x.chat_id === m[1]);
+    if (!l) return json(res, 404, { error: 'Не найдено' });
+    if (!role.users && l.user_id !== sess.id) return json(res, 403, { error: 'Нет доступа' });
+    const b = await readJson(req);
+    if (typeof b.daily === 'boolean') store.tg.setFlag(m[1], 'daily', b.daily);
+    return json(res, 200, { ok: true });
+  }
+
+  // ---------- голос и ИИ: настройки, модели, прослушать, пробное голосовое, журнал, расход ----------
+  if (p === '/admin/api/ai' && req.method === 'GET') {
+    const models = await voice.listModels();
+    const m0 = new Date(Date.now() + 5 * 3600 * 1000);
+    const prev = new Date(Date.UTC(m0.getUTCFullYear(), m0.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
+    return json(res, 200, {
+      info: voice.info(), settings: voice.settings(), models, voices: voice.VOICES, canConfigure: !!role.users,
+      usage: voice.usage(), usagePrev: voice.usage(prev), ffmpeg: await tts.hasFfmpeg(),
+      journal: voice.journal.list(60).map(j => ({ ...j, at: j.at })),
+    });
+  }
+  if (p === '/admin/api/ai' && req.method === 'PUT') {
+    if (!role.users) return json(res, 403, { error: 'Настройки голоса и ИИ меняет только владелец' });
+    const b = await readJson(req);
+    const out = voice.setSettings(b || {});
+    store.log.add(sess.login, `изменил настройки голоса и ИИ (голос ${out.voice}, ответы: ${({ never: 'текстом', voice: 'голосом на голосовые', always: 'всегда голосом' })[out.reply_mode]})`);
+    return json(res, 200, out);
+  }
+  if (p === '/admin/api/ai/preview' && req.method === 'POST') {
+    const b = await readJson(req);
+    const lang = b.lang === 'kk' ? 'kk' : 'ru';
+    const text = String(b.text || '').trim().slice(0, 300) || (lang === 'kk' ? 'Сәлеметсіз бе! Мен «Кит» дүкенінің көмекшісімін. Карго шалбардың бағасы он екі мың тоғыз жүз теңге.' : 'Здравствуйте! Я помощник магазина «Кит». Брюки карго стоят двенадцать тысяч девятьсот тенге.');
+    try {
+      const a = await tts.synth(text, { lang, voice: voice.VOICES.includes(b.voice) ? b.voice : undefined, speed: b.speed ? Number(b.speed) : undefined, persona: typeof b.persona === 'string' ? b.persona.slice(0, 600) : undefined, wav: true });
+      return send(res, 200, a.wav, 'audio/wav', { 'Cache-Control': 'no-store' });
+    } catch (e) { return json(res, 400, { error: e.message }); }
+  }
+  if (p === '/admin/api/ai/test' && req.method === 'POST') {
+    const b = await readJson(req);
+    try { const n = await bot.testVoice(sess.id, b.lang === 'kk' ? 'kk' : 'ru'); return json(res, 200, { sent: n }); }
+    catch (e) { return json(res, e.code || 400, { error: e.message }); }
+  }
+
   if ((m = /^\/admin\/api\/bot\/links\/(-?\d+)$/.exec(p)) && req.method === 'DELETE') {
     const l = store.tg.links().find(x => x.chat_id === m[1]);
     if (!l) return json(res, 404, { error: 'Не найдено' });

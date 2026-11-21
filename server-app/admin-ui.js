@@ -56,7 +56,20 @@ h1{font-size:26px;margin:0 0 6px}
 .menu-btn{display:none}
 .roles{display:grid;gap:8px;margin-bottom:16px}
 .roles div{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:14px}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.vc{border:1px solid var(--line);border-radius:10px;padding:10px 40px 10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:2px;background:#fff;position:relative;text-align:left}
+.vc.on{border:2px solid var(--accent);padding:9px 39px 9px 11px}
+.vc b{font-size:15px}.vc span{font-size:12px;color:var(--muted)}.vc .best{color:var(--ok)}
+.vc .play{position:absolute;top:8px;right:8px;border:0;background:var(--sky);border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:12px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;flex-wrap:wrap;width:fit-content}
+.seg button{border:0;border-right:1px solid var(--line);background:#fff;padding:8px 12px;cursor:pointer;font-weight:600}
+.seg button:last-child{border-right:0}.seg button.on{background:var(--sky);color:#0F4F6B}
+.frow{display:grid;grid-template-columns:210px minmax(0,1fr);gap:12px;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:var(--bg);border-radius:10px;padding:10px 12px}.stat small{color:var(--muted);font-size:13px;display:block}.stat b{font-size:20px}
+.sep{height:1px;background:var(--line);margin:4px 0}
 @media (max-width:820px){
+  .frow{grid-template-columns:1fr}
   .layout{display:block}
   .side{position:fixed;inset:0 auto 0 0;z-index:20;transform:translateX(-100%);transition:transform .2s;height:100%;box-shadow:0 0 40px rgba(0,0,0,.15)}
   .side.open{transform:none}
@@ -450,10 +463,12 @@ function openBot(){
         vparts.push(vout);
       }
       box.appendChild(h('div', {'class':'box'}, vparts));
+      if (v.hasKey) { var aiHost = h('div'); box.appendChild(aiHost); loadAI(aiHost); }
 
-      var t = h('table', {'class':'tbl'}, [h('tr', null, [h('th',{text:'Сотрудник'}), h('th',{text:'Telegram'}), h('th',{text:'С какого времени'}), h('th',{text:''})])]);
+      var t = h('table', {'class':'tbl'}, [h('tr', null, [h('th',{text:'Сотрудник'}), h('th',{text:'Telegram'}), h('th',{text:'С какого времени'}), h('th',{text:'Сводка утром'}), h('th',{text:''})])]);
       b.links.forEach(function(l){
-        t.appendChild(h('tr', null, [h('td', null, [h('b', {text: l.name || l.login}), ' ', h('span', {'class':'hint', text: l.login})]), h('td', {text: l.tg_name || '—'}), h('td', {text: localTime(l.created_at)}),
+        var dchk = h('input', {type:'checkbox', checked: l.daily, onchange: function(){ api('PUT', '/bot/links/' + l.chat_id, {daily: dchk.checked}).catch(function(e){ alert(e.message); dchk.checked = !dchk.checked; }); }});
+        t.appendChild(h('tr', null, [h('td', null, [h('b', {text: l.name || l.login}), ' ', h('span', {'class':'hint', text: l.login})]), h('td', {text: l.tg_name || '—'}), h('td', {text: localTime(l.created_at)}), h('td', null, [dchk]),
           h('td', null, [h('button', {'class':'btn btn-sm btn-danger', type:'button', onclick: function(){
             if (!confirm('Отключить этот Telegram от админки?')) return;
             api('DELETE', '/bot/links/' + l.chat_id).then(load).catch(function(e){ alert(e.message); }); }}, ['Отключить'])])]));
@@ -463,6 +478,137 @@ function openBot(){
     }).catch(function(e){ box.textContent = e.message; });
   }
   load();
+}
+
+// ---------- голос и ИИ ----------
+var VOICE_DESC = {marin:['женский, мягкий',1], cedar:['мужской, спокойный',1], coral:['женский, тёплый'], nova:['женский, бодрый'], shimmer:['женский, светлый'], sage:['женский, ровный'], ash:['мужской, чёткий'], echo:['мужской, нейтральный'], onyx:['мужской, низкий'], ballad:['мужской, выразительный'], verse:['мужской, живой'], alloy:['нейтральный'], fable:['мягкий, сказочный']};
+var player = null;
+function playVoice(opts, btn, out){
+  if (player) { try { player.pause(); } catch(e){} }
+  var old = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  if (out) out.textContent = 'Озвучиваю…';
+  return fetch('/admin/api/ai/preview', { method:'POST', headers:{'Content-Type':'application/json','X-CSRF': B.csrf}, credentials:'same-origin', body: JSON.stringify(opts) })
+    .then(function(r){ if (!r.ok) return r.json().then(function(j){ throw new Error(j.error || 'Ошибка ' + r.status); }); return r.blob(); })
+    .then(function(b){ player = new Audio(URL.createObjectURL(b)); if (out) out.textContent = ''; return player.play(); })
+    .catch(function(e){ if (out) out.textContent = e.message; else alert(e.message); })
+    .then(function(){ if (btn) { btn.disabled = false; btn.textContent = old; } });
+}
+function seg(options, value, onpick){
+  var wrap = h('div', {'class':'seg'});
+  options.forEach(function(o){
+    var b = h('button', {type:'button', 'class': o[0] === value ? 'on' : '', onclick: function(){
+      [].forEach.call(wrap.children, function(c){ c.classList.remove('on'); }); b.classList.add('on'); onpick(o[0]); }}, [o[1]]);
+    wrap.appendChild(b);
+  });
+  return wrap;
+}
+function loadAI(host){
+  host.textContent = 'Загрузка настроек голоса…';
+  api('GET', '/ai').then(function(d){
+    host.innerHTML = '';
+    var S = JSON.parse(JSON.stringify(d.settings)), can = d.canConfigure, isOpenAI = d.info.provider === 'openai';
+    var out = h('div', {'class':'hint'});
+    function sel(list, val, key, rec){
+      var e = h('select', {disabled: !can, onchange: function(){ S[key] = e.value; }});
+      e.appendChild(h('option', {value:'', text:'Автоматически — ' + rec + ' (рекомендуем)'}));
+      list.forEach(function(m){ var o = h('option', {value:m, text:m}); if (m === val) o.selected = true; e.appendChild(o); });
+      if (val && list.indexOf(val) < 0) { var o2 = h('option', {value:val, text:val}); o2.selected = true; e.appendChild(o2); }
+      return e;
+    }
+    var rows = [];
+    rows.push(h('div', {style:'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap'}, [
+      h('b', {style:'font-size:17px', text:'🎤 Голос и ИИ'}),
+      h('span', {'class':'pill', text: isOpenAI ? 'OpenAI подключён' : 'Google Gemini подключён'})]));
+    rows.push(h('div', {'class':'hint', text:'Общие для ботов «Кит» и «Мой сервер».' + (d.models.live ? '' : ' Список моделей не удалось получить от OpenAI — показаны рекомендуемые.')}));
+
+    rows.push(h('b', {text:'Модели'}));
+    rows.push(h('div', {'class':'frow'}, [h('span', {'class':'hint', style:'font-size:15px', text:'Понимание команд'}), sel(d.models.llm, S.model_llm, 'model_llm', d.models.recommended.llm[0])]));
+    if (isOpenAI) {
+      rows.push(h('div', {'class':'frow'}, [h('span', {'class':'hint', style:'font-size:15px', text:'Распознавание речи'}), sel(d.models.stt, S.model_stt, 'model_stt', d.models.recommended.stt[0])]));
+      rows.push(h('div', {'class':'frow'}, [h('span', {'class':'hint', style:'font-size:15px', text:'Голос ответа'}), sel(d.models.tts, S.model_tts, 'model_tts', d.models.recommended.tts[0])]));
+    }
+    rows.push(h('div', {'class':'sep'}));
+    rows.push(h('b', {text:'Как бот отвечает'}));
+    if (isOpenAI) {
+      rows.push(h('div', {'class':'frow'}, [h('span', {'class':'hint', style:'font-size:15px', text:'Отвечать голосом'}),
+        seg([['never','Никогда'],['voice','На голосовые'],['always','Всегда']], S.reply_mode, function(v){ S.reply_mode = v; })]));
+      rows.push(h('div', {'class':'frow'}, [h('span', {'class':'hint', style:'font-size:15px', text:'Язык ответа'}),
+        seg([['auto','Как я говорю'],['ru','Русский'],['kk','Қазақша']], S.reply_lang, function(v){ S.reply_lang = v; })]));
+      var spo = h('span', {style:'min-width:40px;font-weight:600', text: Number(S.speed).toFixed(1) + '×'});
+      var sp = h('input', {type:'range', min:'0.7', max:'1.5', step:'0.1', value: String(S.speed), style:'flex:1', oninput: function(){ S.speed = Number(sp.value); spo.textContent = S.speed.toFixed(1) + '×'; }});
+      rows.push(h('div', {'class':'frow'}, [h('span', {'class':'hint', style:'font-size:15px', text:'Скорость речи'}), h('div', {style:'display:flex;gap:10px;align-items:center'}, [sp, spo])]));
+    }
+    var pers = h('textarea', {rows:'2', style:'min-height:64px', oninput: function(){ S.persona = pers.value; }}); pers.value = S.persona || '';
+    rows.push(h('div', {'class':'frow', style:'align-items:start'}, [h('span', {'class':'hint', style:'font-size:15px;padding-top:10px', text:'Манера общения'}), pers]));
+
+    if (isOpenAI) {
+      rows.push(h('div', {'class':'sep'}));
+      rows.push(h('b', {text:'Голос'}));
+      var grid = h('div', {'class':'vgrid'}), pick = h('div', {'class':'hint', text:'Выбран: ' + S.voice});
+      d.voices.forEach(function(name){
+        var info = VOICE_DESC[name] || [''];
+        var card = h('div', {'class':'vc' + (name === S.voice ? ' on' : ''), role:'button', tabindex:'0', onclick: function(){
+          [].forEach.call(grid.children, function(c){ c.classList.remove('on'); }); card.classList.add('on'); S.voice = name; pick.textContent = 'Выбран: ' + name; }},
+          [h('b', {text:name}), h('span', {text: info[0]}), info[1] ? h('span', {'class':'best', text:'лучшее качество'}) : null]);
+        var pb = h('button', {'class':'play', type:'button', title:'Прослушать ' + name, onclick: function(ev){ ev.stopPropagation(); playVoice({voice:name, speed:S.speed, persona:S.persona}, pb, out); }}, ['▶']);
+        card.appendChild(pb);
+        grid.appendChild(card);
+      });
+      rows.push(grid); rows.push(pick);
+      rows.push(h('div', {'class':'hint', text:'Описание голосов примерное — лучше послушать кнопкой ▶.' + (d.ffmpeg ? '' : ' Сейчас на сервере нет ffmpeg, поэтому ответы придут аудиофайлом, а не голосовым — запустите обновление сервера, оно его поставит.')}));
+    }
+
+    rows.push(h('div', {'class':'sep'}));
+    rows.push(h('b', {text:'Бот «Кит»'}));
+    var rem = h('select', {onchange: function(){ S.remind_after = Number(rem.value); }});
+    [[0,'Не напоминать'],[15,'Через 15 минут'],[30,'Через 30 минут'],[60,'Через 1 час'],[120,'Через 2 часа'],[240,'Через 4 часа']].forEach(function(o){ var e = h('option', {value:String(o[0]), text:o[1]}); if (o[0] === S.remind_after) e.selected = true; rem.appendChild(e); });
+    rows.push(h('div', {'class':'frow'}, [h('span', {'class':'hint', style:'font-size:15px', text:'Напомнить о новой заявке'}), rem]));
+    var stime = h('input', {type:'text', value:S.summary_time, placeholder:'09:30', style:'max-width:120px', oninput: function(){ S.summary_time = stime.value.trim(); }});
+    rows.push(h('div', {'class':'frow'}, [h('span', {'class':'hint', style:'font-size:15px', text:'Утренняя сводка в'}), stime]));
+    rows.push(h('div', {'class':'hint', text:'Напоминания приходят с 9:00 до 21:00. Кому присылать сводку — галочки в таблице «Подключённые Telegram» ниже.'}));
+    rows.push(h('b', {text:'Бот «Мой сервер»'}));
+    var alv = h('input', {type:'checkbox', checked: S.alarm_voice, onchange: function(){ S.alarm_voice = alv.checked; }});
+    rows.push(h('label', {'class':'check'}, [alv, 'Тревоги присылать ещё и голосовым']));
+
+    rows.push(h('div', {'class':'sep'}));
+    rows.push(h('b', {text:'Расход за месяц'}));
+    var u = d.usage, mins = function(x){ return Math.round((x || 0) / 6) / 10; };
+    rows.push(h('div', {'class':'stats'}, [
+      h('div', {'class':'stat'}, [h('small', {text:'Запросов к ИИ'}), h('b', {text: String(u.requests) + (S.monthly_limit ? ' из ' + S.monthly_limit : '')})]),
+      h('div', {'class':'stat'}, [h('small', {text:'Голосовых получено'}), h('b', {text: mins(u.voice_in_sec) + ' мин'})]),
+      h('div', {'class':'stat'}, [h('small', {text:'Голосом отвечено'}), h('b', {text: mins(u.voice_out_sec) + ' мин'})]),
+      h('div', {'class':'stat'}, [h('small', {text:'Текст (токены)'}), h('b', {text: Math.round((u.tokens_in + u.tokens_out) / 1000) + ' тыс.'})])]));
+    rows.push(h('div', {'class':'hint'}, ['Прошлый месяц: ' + d.usagePrev.requests + ' запросов. Точная сумма в долларах — в ', h('a', {href:'https://platform.openai.com/usage', target:'_blank', rel:'noopener', text:'кабинете OpenAI → Usage'}), '.']));
+    var lim = h('input', {type:'text', value:String(S.monthly_limit), style:'max-width:140px', oninput: function(){ S.monthly_limit = Number(lim.value.replace(/\D/g, '')) || 0; }});
+    rows.push(h('div', {'class':'frow'}, [h('span', {'class':'hint', style:'font-size:15px', text:'Лимит запросов в месяц'}), h('div', null, [lim, h('div', {'class':'hint', text:'0 — без лимита. Когда лимит кончится, боты работают кнопками, но без ИИ.'})])]));
+
+    var btns = [];
+    if (can) btns.push(h('button', {'class':'btn btn-main', type:'button', onclick: function(){
+      out.textContent = 'Сохраняю…';
+      api('PUT', '/ai', S).then(function(){ out.textContent = 'Сохранено ✅'; }).catch(function(e){ out.textContent = e.message; }); }}, ['Сохранить']));
+    if (isOpenAI) {
+      var lb = h('button', {'class':'btn', type:'button', onclick: function(){ playVoice({voice:S.voice, speed:S.speed, persona:S.persona, lang: S.reply_lang === 'kk' ? 'kk' : 'ru'}, lb, out); }}, ['▶ Прослушать здесь']);
+      btns.push(lb);
+      btns.push(h('button', {'class':'btn', type:'button', onclick: function(){
+        out.textContent = 'Отправляю… (сначала сохраните, если меняли голос)';
+        api('POST', '/ai/test', {lang: S.reply_lang === 'kk' ? 'kk' : 'ru'}).then(function(j){ out.textContent = 'Отправлено в Telegram ✅'; }).catch(function(e){ out.textContent = e.message; }); }}, ['✈️ Пробное голосовое мне в Telegram']));
+    }
+    rows.push(h('div', {style:'display:flex;gap:8px;flex-wrap:wrap'}, btns));
+    rows.push(out);
+    host.appendChild(h('div', {'class':'box'}, rows));
+
+    // журнал команд
+    var jt = h('table', {'class':'tbl'}, [h('tr', null, [h('th',{text:'Когда'}), h('th',{text:'Бот · кто'}), h('th',{text:'Что сказали'}), h('th',{text:'Что сделал бот'})])]);
+    d.journal.forEach(function(j){
+      jt.appendChild(h('tr', null, [h('td', {text: localTime(j.at), style:'white-space:nowrap'}),
+        h('td', null, [h('div', {text: j.bot}), h('span', {'class':'hint', text: j.user + ' · ' + j.kind})]),
+        h('td', {text: j.heard || '—'}), h('td', null, [h('span', {'class':'pill', text: j.action || '—'}), h('div', {'class':'hint', text: j.result || ''})])]));
+    });
+    host.appendChild(h('div', {'class':'box'}, [h('b', {text:'📜 Журнал голосовых и текстовых команд'}),
+      h('div', {'class':'hint', text:'Последние 60: что сказали, что понял бот и что ответил. Помогает понять, где бот ошибся.'}),
+      d.journal.length ? h('div', {style:'overflow:auto'}, [jt]) : h('div', {'class':'hint', text:'Пока команд не было.'})]));
+  }).catch(function(e){ host.textContent = e.message; });
 }
 
 // ---------- сервер ----------

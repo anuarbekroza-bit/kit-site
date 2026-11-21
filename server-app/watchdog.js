@@ -16,6 +16,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function loadState() { try { return JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch { return { fails: 0, lastRestart: 0, lastStillDown: 0 }; } }
 function saveState(s) { fs.mkdirSync(path.dirname(STATE), { recursive: true }); fs.writeFileSync(STATE, JSON.stringify(s)); }
+// события для отчёта «что было ночью» в боте сервера (последние 50)
+function event(st, text) { st.events = [...(st.events || []), { at: Date.now(), text }].slice(-50); }
 
 async function appOk() {
   try { const r = await fetch(APP_URL, { signal: AbortSignal.timeout(10000) }); return r.ok; } catch { return false; }
@@ -50,6 +52,8 @@ async function main() {
   // nginx
   if (!active('nginx')) {
     const ok = restart('nginx') && (await sleep(3000), active('nginx'));
+    event(st, ok ? 'Nginx был остановлен — сторож перезапустил его, сайт снова открывается' : 'Nginx остановлен и не запускается');
+    saveState(st);
     if (ok) await alert('🛠 <b>Nginx был остановлен</b> — сторож перезапустил его. Сайт снова открывается ✅');
     else if (Date.now() - (st.nginxAlert || 0) > 60 * 60 * 1000) {   // о неудаче — не чаще раза в час
       st.nginxAlert = Date.now(); saveState(st);
@@ -79,6 +83,7 @@ async function main() {
   await sleep(15000);
   const ok = await appOk();
   st.fails = ok ? 0 : st.fails;
+  event(st, ok ? 'Сайт не отвечал — сторож перезапустил его, после этого всё заработало' : 'Сайт не отвечал, перезапуск сторожем не помог');
   saveState(st);
   await alert(ok
     ? '🛠 <b>Сайт не отвечал</b> — сторож перезапустил его. Сейчас всё работает ✅'

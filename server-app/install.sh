@@ -21,6 +21,12 @@ if [ "${NODE_MAJOR:-0}" -lt 22 ]; then
   DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs >/dev/null
 fi
 echo "   Node.js $(node -v)"
+# ffmpeg — чтобы боты отвечали настоящими голосовыми (без него придёт аудиофайл)
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  echo "   Ставлю ffmpeg для голосовых ответов ботов…"
+  { DEBIAN_FRONTEND=noninteractive apt-get install -y ffmpeg >/dev/null 2>&1 || { apt-get update >/dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y ffmpeg >/dev/null 2>&1; }; } \
+    && echo "   ffmpeg установлен" || echo "   ffmpeg не установился — голосовые ответы будут приходить аудиофайлом"
+fi
 
 say "2/7 Код сайта и админки"
 id kit >/dev/null 2>&1 || useradd --system --home-dir "$DATA" --shell /usr/sbin/nologin kit
