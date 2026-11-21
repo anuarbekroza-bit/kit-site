@@ -4,6 +4,8 @@
 // Сервис выбирается по ключу, который владелец вставляет в админке:
 //   • OpenAI / ChatGPT (ключ sk-…) — основной: расшифровка речи (gpt-transcribe), потом разбор команды;
 //   • Google Gemini (ключ AIza…) — запасной: слушает голос сам, одним запросом.
+// Ключ берётся из админки, а если там пусто — из настроек сервера (переменная OPENAI_API_KEY
+// в /etc/kit/kit.env или в службе kit-app). Один ключ — для обоих ботов: магазина и сервера.
 // Без внешних пакетов: только fetch из Node.js 22.
 const store = require('./db');
 
@@ -26,13 +28,17 @@ let status = 'off', lastError = '';
 const working = {};   // какая модель сработала последней — чтобы не перебирать каждый раз
 
 const providerOf = key => /^AIza[0-9A-Za-z_-]{20,}$/.test(key) ? 'gemini' : /^sk-[0-9A-Za-z_-]{20,}$/.test(key) ? 'openai' : '';
-const keyNow = () => store.meta.get('voice_key');
-const enabled = () => !!keyNow();
+const unq = v => String(v || '').trim().replace(/^["']|["']$/g, '');
+const envKey = () => unq(process.env.OPENAI_API_KEY) || unq(process.env.KIT_OPENAI_KEY) || unq(process.env.GEMINI_API_KEY);
+const keyNow = () => store.meta.get('voice_key') || envKey();
+const keySource = () => store.meta.get('voice_key') ? 'admin' : envKey() ? 'server' : '';
+const enabled = () => !!keyNow() && !!providerOf(keyNow());
 
 function info() {
   const key = keyNow();
-  if (!key) return { status: 'off', provider: '', lastError: '', hasKey: false };
-  return { status: status === 'off' ? 'ok' : status, provider: providerOf(key), lastError, hasKey: true };
+  if (!key) return { status: 'off', provider: '', lastError: '', hasKey: false, source: '' };
+  if (!providerOf(key)) return { status: 'error', provider: '', lastError: 'Ключ в настройках сервера не похож на ключ OpenAI (sk-…) или Google (AIza…)', hasKey: true, source: keySource() };
+  return { status: status === 'off' ? 'ok' : status, provider: providerOf(key), lastError, hasKey: true, source: keySource() };
 }
 
 const fail = (msg, extra) => Object.assign(new Error(msg), extra || {});
@@ -106,17 +112,18 @@ const FIELDS = {
   reply: ['string', 'Для unknown: короткий уточняющий вопрос на языке человека. Иначе пусто.'],
 };
 
-function schemaGemini() {
+function schemaGemini(fields) {
   const properties = {};
-  for (const [k, [t, d, en]] of Object.entries(FIELDS)) properties[k] = { type: t.toUpperCase(), description: d, ...(en ? { enum: en.filter(Boolean) } : {}) };
-  // Gemini не любит пустую строку в enum — order_status без enum, проверим сами
-  delete properties.order_status.enum;
-  return { type: 'OBJECT', properties, required: Object.keys(FIELDS), propertyOrdering: Object.keys(FIELDS) };
+  for (const [k, [t, d, en]] of Object.entries(fields)) {
+    // Gemini не любит пустую строку в enum — такие поля без enum, проверим сами
+    properties[k] = { type: t.toUpperCase(), description: d, ...(en && !en.includes('') ? { enum: en } : {}) };
+  }
+  return { type: 'OBJECT', properties, required: Object.keys(fields), propertyOrdering: Object.keys(fields) };
 }
-function schemaOpenAI() {
+function schemaOpenAI(fields) {
   const properties = {};
-  for (const [k, [t, d, en]] of Object.entries(FIELDS)) properties[k] = { type: t, description: d, ...(en ? { enum: en } : {}) };
-  return { type: 'object', properties, required: Object.keys(FIELDS), additionalProperties: false };
+  for (const [k, [t, d, en]] of Object.entries(fields)) properties[k] = { type: t, description: d, ...(en ? { enum: en } : {}) };
+  return { type: 'object', properties, required: Object.keys(fields), additionalProperties: false };
 }
 
 function instructions(ctx) {
@@ -159,14 +166,13 @@ ${ctx.confirming ? 'Бот спросил подтверждение: ' + ctx.co
 }
 
 // ---------- разбор ----------
-function clean(r, fallbackText) {
+function clean(r, fallbackText, fields = FIELDS) {
   const o = {};
-  for (const [k, [t]] of Object.entries(FIELDS)) {
+  for (const [k, [t, , en]] of Object.entries(fields)) {
     const v = r && r[k];
     o[k] = t === 'integer' ? (Number.isFinite(Number(v)) ? Math.trunc(Number(v)) : 0) : String(v ?? '').trim();
+    if (en && !en.includes(o[k])) o[k] = k === 'action' ? 'unknown' : en.includes('') ? '' : en[0];
   }
-  if (!ACTIONS.includes(o.action)) o.action = 'unknown';
-  if (!['work', 'done', 'cancel'].includes(o.order_status)) o.order_status = '';
   o.lang = o.lang === 'kk' ? 'kk' : 'ru';
   if (!o.transcript && fallbackText) o.transcript = fallbackText;
   return o;
@@ -177,14 +183,14 @@ function parseJson(text) {
   try { return JSON.parse(t); } catch { throw fail('ИИ ответил непонятно, попробуйте сказать ещё раз.'); }
 }
 
-async function viaGemini(key, { audio, mime, text }, ctx) {
+async function viaGemini(key, { audio, mime, text }, spec) {
   const parts = [];
   if (audio) parts.push({ inlineData: { mimeType: mime || 'audio/ogg', data: audio.toString('base64') } });
   parts.push({ text: audio ? 'Голосовое сообщение сотрудника — выше. Распознай и верни команду.' : 'Сообщение сотрудника: ' + text });
   const body = {
-    systemInstruction: { parts: [{ text: instructions(ctx) }] },
+    systemInstruction: { parts: [{ text: spec.system }] },
     contents: [{ role: 'user', parts }],
-    generationConfig: { responseMimeType: 'application/json', responseSchema: schemaGemini(), temperature: 0 },
+    generationConfig: { responseMimeType: 'application/json', responseSchema: schemaGemini(spec.fields), temperature: 0 },
   };
   const j = await tryModels('gemini', GEMINI_MODELS, model => http(`${GEMINI_API}/v1beta/models/${model}:generateContent`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body),
@@ -192,14 +198,13 @@ async function viaGemini(key, { audio, mime, text }, ctx) {
   const c = j && j.candidates && j.candidates[0];
   const out = c && c.content && (c.content.parts || []).map(p => p.text || '').join('');
   if (!out) throw fail(c && c.finishReason === 'SAFETY' ? 'Google не стал обрабатывать это сообщение.' : 'Не расслышал — попробуйте сказать ещё раз.');
-  return clean(parseJson(out), text);
+  return clean(parseJson(out), text, spec.fields);
 }
 
-async function viaOpenAI(key, { audio, mime, text }, ctx) {
+async function viaOpenAI(key, { audio, mime, text }, spec) {
   let heard = text;
   if (audio) {
-    const hint = 'Речь на русском и казахском, часто вперемешку. Магазин детской одежды «Кит», Астана. Команды: цена, тенге, рост, скрыть, показать, заявка. Товары: ' +
-      ctx.products.map(p => p.name_ru + (p.name_kk ? ' / ' + p.name_kk : '')).join(', ');
+    const hint = spec.hint;
     const j = await tryModels('openai_stt', OPENAI_STT, model => {
       const f = new FormData();
       f.append('model', model);
@@ -214,23 +219,23 @@ async function viaOpenAI(key, { audio, mime, text }, ctx) {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
     body: JSON.stringify({
       model,
-      messages: [{ role: 'system', content: instructions(ctx) }, { role: 'user', content: 'Сообщение сотрудника: ' + heard }],
-      response_format: { type: 'json_schema', json_schema: { name: 'command', strict: true, schema: schemaOpenAI() } },
+      messages: [{ role: 'system', content: spec.system }, { role: 'user', content: 'Сообщение сотрудника: ' + heard }],
+      response_format: { type: 'json_schema', json_schema: { name: 'command', strict: true, schema: schemaOpenAI(spec.fields) } },
     }),
   }, 'OpenAI'));
   const out = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
-  const r = clean(parseJson(out), heard);
+  const r = clean(parseJson(out), heard, spec.fields);
   if (audio) r.transcript = heard;   // показываем ровно то, что расслышала модель речи
   return r;
 }
 
-// input: { audio: Buffer, mime } или { text }; ctx: { products, orders, awaiting, confirming }
-async function understand(input, ctx) {
+async function run(input, spec) {
   const key = keyNow();
   if (!key) throw fail('Голосовое управление не включено');
   const provider = providerOf(key);
+  if (!provider) throw fail('Ключ ИИ в настройках сервера не похож на ключ OpenAI (sk-…)');
   try {
-    const r = provider === 'gemini' ? await viaGemini(key, input, ctx) : await viaOpenAI(key, input, ctx);
+    const r = provider === 'gemini' ? await viaGemini(key, input, spec) : await viaOpenAI(key, input, spec);
     if (status !== 'ok') { status = 'ok'; lastError = ''; }
     return r;
   } catch (e) {
@@ -240,4 +245,45 @@ async function understand(input, ctx) {
   }
 }
 
-module.exports = { configure, info, enabled, understand, ACTIONS, _test: { providerOf, clean, instructions, schemaGemini, schemaOpenAI } };
+// бот магазина. input: { audio: Buffer, mime } или { text }; ctx: { products, orders, awaiting, confirming }
+function understand(input, ctx) {
+  return run(input, {
+    system: instructions(ctx), fields: FIELDS,
+    hint: 'Речь на русском и казахском, часто вперемешку. Магазин детской одежды «Кит», Астана. Команды: цена, тенге, рост, скрыть, показать, заявка. Товары: ' +
+      ctx.products.map(p => p.name_ru + (p.name_kk ? ' / ' + p.name_kk : '')).join(', '),
+  });
+}
+
+// ---------- бот сервера ----------
+const SERVER_ACTIONS = ['menu', 'status', 'backup', 'backups', 'send_backup', 'alerts_menu', 'alerts_on', 'alerts_off', 'daily_on', 'daily_off', 'unknown'];
+const SERVER_FIELDS = {
+  transcript: FIELDS.transcript,
+  lang: FIELDS.lang,
+  action: ['string', 'Команда для бота сервера.', SERVER_ACTIONS],
+  reply: FIELDS.reply,
+};
+function serverInstructions(ctx) {
+  return `Ты — помощник служебного Telegram-бота СЕРВЕРА магазина «Кит» (сайт kit.r-agent.kz и админка). Им пользуются владелец и администраторы.
+Человек говорит голосом или пишет по-русски, по-казахски или вперемешку. Распознай точно и верни ОДНУ команду строго JSON по схеме.
+
+Команды (action):
+- menu — привет, помощь, «что ты умеешь».
+- status — как дела у сервера/сайта, работает ли сайт, почему не открывается, память, диск, процессор, сертификат, «сервер қалай», «сайт істеп тұр ма».
+- backup — сделать бэкап / резервную копию / сохранить базу сейчас («бэкап жаса», «көшірме жаса»).
+- backups — показать список бэкапов, когда был последний бэкап.
+- send_backup — прислать файл бэкапа сюда, скачать базу.
+- alerts_menu — настройки уведомлений вообще.
+- alerts_on / alerts_off — включить / выключить тревоги (уведомления о проблемах).
+- daily_on / daily_off — включить / выключить ежедневный утренний отчёт в 10:00.
+- unknown — непонятно или просьба, которую бот не умеет (перезагрузить сервер, поменять сайт и т.п.); в reply коротко скажи на языке человека, что умеет бот: статус, бэкап, список бэкапов, уведомления.
+${ctx && ctx.flags ? `Сейчас у этого человека: тревоги ${ctx.flags.alerts ? 'включены' : 'выключены'}, отчёт в 10:00 ${ctx.flags.daily ? 'включён' : 'выключен'}.` : ''}`;
+}
+function understandServer(input, ctx) {
+  return run(input, {
+    system: serverInstructions(ctx), fields: SERVER_FIELDS,
+    hint: 'Речь на русском и казахском, часто вперемешку. Сервер сайта магазина «Кит». Слова: статус, сервер, сайт, бэкап, резервная копия, уведомления, тревоги, отчёт, диск, память, сертификат.',
+  });
+}
+
+module.exports = { configure, info, enabled, understand, understandServer, ACTIONS, SERVER_ACTIONS,
+  _test: { providerOf, clean, instructions, serverInstructions, schemaGemini, schemaOpenAI, FIELDS, SERVER_FIELDS } };

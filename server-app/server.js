@@ -308,7 +308,7 @@ async function admin(req, res, url) {
       const snap = await mon.snapshot();
       const links = store.srv.links().filter(l => role.users || l.user_id === sess.id)
         .map(l => ({ chat_id: l.chat_id, tg_name: l.tg_name, login: l.login, name: l.name, created_at: l.created_at, alerts: !!l.alerts, daily: !!l.daily }));
-      return json(res, 200, { snap, problems: mon.problems(snap), report: mon.report(snap, false), bot: srvBot.info(), canConfigure: !!role.users, links,
+      return json(res, 200, { snap, problems: mon.problems(snap), report: mon.report(snap, false), bot: srvBot.info(), voice: voice.info(), canConfigure: !!role.users, links,
         backups: store.backupsList().slice(0, 30).map(b => ({ name: b.name, size: b.size, mtime: b.mtime })) });
     }
     if (p === '/admin/api/server/bot' && req.method === 'PUT') {

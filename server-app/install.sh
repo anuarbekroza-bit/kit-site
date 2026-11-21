@@ -46,6 +46,23 @@ say "4/7 Вход в админку"
 echo "   Логин и пароль владельца задаются в браузере по одноразовой ссылке"
 
 say "5/7 Служба (работает 24/7, сама перезапускается)"
+# Ключи ИИ для голосового управления ботами (OPENAI_API_KEY=sk-…) живут в /etc/kit/kit.env —
+# этот файл обновление не трогает. Если ключ вписали в другое место — переносим его сюда.
+ENV_FILE=/etc/kit/kit.env
+mkdir -p /etc/kit; chmod 755 /etc/kit
+[ -f "$ENV_FILE" ] || { touch "$ENV_FILE"; }
+chown root:root "$ENV_FILE"; chmod 600 "$ENV_FILE"
+for f in /etc/systemd/system/kit-app.service "$APP.old/.env" "$APP.old/server-app/.env" "$DATA/.env" /root/.env /root/kit.env; do
+  [ -f "$f" ] || continue
+  grep -hoE '^(Environment="?|export +)?(OPENAI_API_KEY|KIT_OPENAI_KEY|GEMINI_API_KEY)=["'"'"']?[A-Za-z0-9_-]+' "$f" 2>/dev/null \
+    | sed -E 's/^(Environment="?|export +)//; s/=["'"'"']/=/' | while IFS= read -r line; do
+      k=${line%%=*}
+      grep -q "^$k=" "$ENV_FILE" || { echo "$line" >> "$ENV_FILE"; echo "   Ключ $k перенесён из $f в $ENV_FILE"; }
+    done
+done
+if grep -qE '^(OPENAI_API_KEY|KIT_OPENAI_KEY|GEMINI_API_KEY)=.+' "$ENV_FILE"; then echo "   Ключ ИИ для голосовых: найден ($ENV_FILE)"
+else echo "   Ключ ИИ для голосовых: не найден на сервере (можно вставить в админке → «Telegram-бот»)"; fi
+
 cat > /etc/systemd/system/kit-app.service <<EOF
 [Unit]
 Description=Kit: сайт и админка
@@ -59,6 +76,7 @@ Environment=KIT_DATA=$DATA
 Environment=PORT=3000
 Environment=SITE_URL=https://$SITE_DOMAIN
 Environment=ADMIN_URL=https://$ADMIN_DOMAIN
+EnvironmentFile=-$ENV_FILE
 ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning $APP/server.js
 Restart=always
 RestartSec=3

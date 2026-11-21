@@ -418,7 +418,7 @@ function openBot(){
 
       // голосовое управление
       var v = b.voice || {};
-      var vst = v.status === 'ok' && v.hasKey ? h('div', {text:'✅ Включено (' + (v.provider === 'gemini' ? 'Google Gemini' : 'OpenAI / ChatGPT') + '). Отправьте боту голосовое — по-русски или по-казахски.'})
+      var vst = v.status === 'ok' && v.hasKey ? h('div', {text:'✅ Включено (' + (v.provider === 'gemini' ? 'Google Gemini' : 'OpenAI / ChatGPT') + (v.source === 'server' ? ', ключ из настроек сервера' : '') + '). Голосовые понимают оба бота — магазина и сервера, по-русски и по-казахски.'})
         : v.status === 'error' ? h('div', {style:'color:var(--err);font-weight:600', text:'⚠️ ' + v.lastError})
         : h('div', {text:'Выключено.'});
       var vparts = [h('b', {text:'🎤 Голосовое управление (русский и казахский)'}), vst];
@@ -428,8 +428,9 @@ function openBot(){
         'Перед любым изменением бот показывает, что понял, и ждёт кнопку «✅ Да».'];
       vparts.push(h('div', {'class':'hint', style:'font-size:15px;line-height:1.6'}, ex.map(function(line){ return h('div', {text: line}); })));
       if (b.canConfigure) {
-        var vkey = h('input', {type:'password', autocomplete:'off', placeholder: v.hasKey ? 'Ключ сохранён. Вставьте новый, чтобы заменить' : 'sk-…'});
+        var vkey = h('input', {type:'password', autocomplete:'off', placeholder: v.source === 'admin' ? 'Ключ сохранён. Вставьте новый, чтобы заменить' : v.source === 'server' ? 'Ключ уже есть на сервере. Можно вставить другой — он будет главнее' : 'sk-…'});
         var vout = h('div', {'class':'hint'});
+        if (v.source === 'server') vparts.push(h('div', {'class':'hint', text:'Ключ OpenAI записан на сервере в /etc/kit/kit.env (строка OPENAI_API_KEY=…). Сюда его вставлять не нужно.'}));
         if (!v.hasKey) vparts.push(h('ol', {style:'margin:0;padding-left:20px;line-height:1.7'}, [
           h('li', null, ['Откройте ', h('a', {href:'https://platform.openai.com/api-keys', target:'_blank', rel:'noopener', text:'platform.openai.com/api-keys'}), ' и войдите (можно тем же аккаунтом, что и в ChatGPT).']),
           h('li', {text:'Нажмите «Create new secret key» (Создать ключ), назовите его, например, «Кит бот», и скопируйте — ключ начинается с sk-…'}),
@@ -442,7 +443,7 @@ function openBot(){
             if (!vkey.value.trim()) { vout.textContent = 'Вставьте ключ'; return; }
             vout.textContent = 'Проверяю ключ…';
             api('PUT', '/bot/voice', {key: vkey.value.trim()}).then(function(){ load(); }).catch(function(e){ vout.textContent = e.message; }); }}, [v.hasKey ? 'Заменить ключ' : 'Включить']),
-          v.hasKey ? h('button', {'class':'btn btn-danger', type:'button', onclick: function(){
+          v.source === 'admin' ? h('button', {'class':'btn btn-danger', type:'button', onclick: function(){
             if (!confirm('Выключить голосовое управление? Кнопки бота продолжат работать.')) return;
             api('PUT', '/bot/voice', {key: ''}).then(load).catch(function(e){ alert(e.message); }); }}, ['Выключить']) : null]));
         vparts.push(h('div', {'class':'hint', text:'Голосовые, список товаров и открытых заявок (имя клиента и товар, без телефонов) отправляются на распознавание в выбранный сервис. Ключ хранится только на вашем сервере.'}));
@@ -522,6 +523,7 @@ function openServer(){
         : b.status === 'starting' ? h('div', {text:'⏳ Запускается… обновите через несколько секунд'})
         : h('div', {text:'Бот сервера ещё не подключён.'});
       var parts = [h('b', {text:'🤖 Telegram-бот сервера'}), st,
+        h('div', {'class':'hint', text: d.voice && d.voice.hasKey && d.voice.status === 'ok' ? '🎤 Понимает голосовые и текст своими словами (русский и казахский): «Как сервер?», «Бэкап жаса», «Выключи утренний отчёт».' : '🎤 Голосовые включаются в разделе «🤖 Telegram-бот» → «Голосовое управление» (один ключ на оба бота).'}),
         h('div', {'class':'hint', style:'font-size:15px', text:'Отдельный бот (не тот, что для заявок): статус по кнопке, бэкап, тревоги, если с сервером что-то не так, и отчёт каждый день в 10:00.'})];
       if (d.canConfigure) {
         var tok = h('input', {type:'password', autocomplete:'off', placeholder: b.hasToken ? 'Токен сохранён. Вставьте новый, чтобы заменить' : 'Токен бота сервера: 1234567890:AAH…'});

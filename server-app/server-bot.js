@@ -5,11 +5,15 @@
 //  • Тревоги каждые 5 минут: сайт не открывается, диск/память, сертификат, давно нет бэкапа.
 //    Когда проблема ушла — сообщение «снова в норме». Плюс ежедневный отчёт в 10:00 (по желанию).
 // Если приложение совсем упало, его перезапускает внешний сторож watchdog.js и пишет сюда же.
+//  • 🎤 Понимает голосовые и обычный текст по-русски и по-казахски: «как сервер?», «бэкап жаса»,
+//    «выключи утренний отчёт». Тот же ключ OpenAI, что и у бота магазина.
 const fs = require('fs');
 const os = require('os');
 const store = require('./db');
 const mon = require('./monitor');
 const { ROLES } = require('./schema');
+const voice = require('./voice');
+const MAX_VOICE_SEC = 90;
 
 const API = process.env.TG_API || 'https://api.telegram.org';
 const CHECK_EVERY = Number(process.env.KIT_MONITOR_MS) || 5 * 60 * 1000;
@@ -33,6 +37,13 @@ async function call(method, params, form) {
 }
 const say = (chat, text, markup) => call('sendMessage', { chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true, ...(markup ? { reply_markup: markup } : {}) });
 const edit = (msg, text, markup) => call('editMessageText', { chat_id: msg.chat.id, message_id: msg.message_id, text, parse_mode: 'HTML', reply_markup: markup || { inline_keyboard: [] } });
+
+async function downloadFile(fileId) {
+  const f = await call('getFile', { file_id: fileId });
+  const r = await fetch(`${API}/file/bot${token}/${f.file_path}`, { signal: AbortSignal.timeout(60000) });
+  if (!r.ok) throw new Error('Не удалось скачать голосовое');
+  return Buffer.from(await r.arrayBuffer());
+}
 
 function sendFile(chat, file, caption) {
   const f = new FormData();
@@ -141,9 +152,75 @@ async function handle(up) {
   if (text === '💾 Бэкап' || text === '/backup') return doBackup(user, chat);
   if (text === '📂 Бэкапы' || text === '/backups') return listBackups(user, chat);
   if (text === '🔔 Уведомления' || text === '/alerts') return alertsMenu(chat);
+  if (m.voice || m.audio) return onVoice(user, chat, m).catch(e => say(chat, '⚠️ ' + esc(e.message), MENU));
+  if (text && !text.startsWith('/') && voice.enabled()) return understandAndRun(user, chat, { text }, false).catch(e => say(chat, '⚠️ ' + esc(e.message), MENU));
+  return sayHelp(user, chat);
+}
+
+function sayHelp(user, chat, lang) {
+  const v = voice.enabled();
+  if (lang === 'kk') return say(chat, `Сәлеметсіз бе, ${esc(user.name || user.login)}! Бұл «Кит» серверінің боты.\n\n` +
+    '📊 <b>Статус</b> — сайт жұмыс істей ме, жад, диск, сертификат\n💾 <b>Бэкап</b> — базаның көшірмесін қазір жасау\n' +
+    '📂 <b>Бэкапы</b> — соңғы көшірмелер\n🔔 <b>Уведомления</b> — дабылдар және күнделікті есеп' +
+    (v ? '\n\n🎤 Дауыспен де айтуға болады: «Сервер қалай?», «Бэкап жаса», «Таңғы есепті өшір».' : ''), MENU);
   return say(chat, `Здравствуйте, ${esc(user.name || user.login)}! Это бот сервера «Кит».\n\n` +
     '📊 <b>Статус</b> — работает ли сайт, память, диск, сертификат\n💾 <b>Бэкап</b> — сделать копию базы сейчас\n' +
-    '📂 <b>Бэкапы</b> — последние копии\n🔔 <b>Уведомления</b> — тревоги и ежедневный отчёт', MENU);
+    '📂 <b>Бэкапы</b> — последние копии\n🔔 <b>Уведомления</b> — тревоги и ежедневный отчёт' +
+    (v ? '\n\n🎤 Можно голосом или своими словами, по-русски или по-казахски: «Как сервер?», «Сделай бэкап», «Когда был последний бэкап?», «Выключи утренний отчёт».' : ''), MENU);
+}
+
+// ---------- голосовое управление ----------
+async function onVoice(user, chat, m) {
+  const v = m.voice || m.audio;
+  const kk = m.from && m.from.language_code === 'kk';
+  if (!voice.enabled()) return say(chat, kk
+    ? 'Дауыспен басқару әлі қосылмаған. Иесі оны админкада қоса алады → «🤖 Telegram-бот» → «🎤 Голосовое управление».'
+    : 'Голосовое управление ещё не включено. Владелец может включить его в админке → «🤖 Telegram-бот» → «🎤 Голосовое управление».', MENU);
+  if ((v.duration || 0) > MAX_VOICE_SEC || (v.file_size || 0) > 15 * 1024 * 1024)
+    return say(chat, kk ? `Дауыстық хабар тым ұзын — қысқаша айтыңыз (${MAX_VOICE_SEC} секундқа дейін).` : `Слишком длинное голосовое — скажите коротко (до ${MAX_VOICE_SEC} секунд).`);
+  const buf = await downloadFile(v.file_id);
+  return understandAndRun(user, chat, { audio: buf, mime: (v.mime_type || 'audio/ogg').split(';')[0] }, true);
+}
+
+async function understandAndRun(user, chat, inp, isVoice) {
+  call('sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => {});
+  const r = await voice.understandServer(inp, { flags: { alerts: !!user.alerts, daily: !!user.daily } });
+  if (isVoice && r.transcript) await say(chat, `${r.lang === 'kk' ? '🎤 Естідім' : '🎤 Услышал'}: <i>${esc(r.transcript)}</i>`);
+  return runCommand(user, chat, r);
+}
+
+async function setFlagSay(user, chat, flag, on, L) {
+  store.srv.setFlag(chat, flag, on);
+  store.log.add(user.login, `бот сервера (голосом/текстом): ${flag === 'alerts' ? 'тревоги' : 'отчёт в 10:00'} — ${on ? 'включено' : 'выключено'}`);
+  const what = flag === 'alerts' ? (L === 'kk' ? 'Дабылдар' : 'Тревоги') : (L === 'kk' ? 'Сағат 10:00-дегі есеп' : 'Отчёт в 10:00');
+  const st = L === 'kk' ? (on ? 'қосылды' : 'өшірілді') : (on ? (flag === 'alerts' ? 'включены' : 'включён') : (flag === 'alerts' ? 'выключены' : 'выключен'));
+  return say(chat, `${on ? '🔔' : '🔕'} ${what}: <b>${st}</b>.`, alertsKb(userOf(chat)));
+}
+
+async function runCommand(user, chat, r) {
+  const L = r.lang;
+  switch (r.action) {
+    case 'menu': return sayHelp(user, chat, L);
+    case 'status': return sendStatus(chat);
+    case 'backup': return doBackup(user, chat);
+    case 'backups': return listBackups(user, chat);
+    case 'send_backup': {
+      if (!isOwner(user)) return say(chat, L === 'kk' ? 'Бэкап файлы тек иесіне жіберіледі.' : 'Файл бэкапа присылается только владельцу.', MENU);
+      const b = store.backupsList()[0];
+      if (!b) return say(chat, L === 'kk' ? 'Әзірге бэкап жоқ. «💾 Бэкап» басыңыз.' : 'Бэкапов пока нет. Нажмите «💾 Бэкап».', MENU);
+      store.log.add(user.login, 'получил файл бэкапа в Telegram (голосом/текстом)');
+      return sendFile(chat, b.path, `💾 Бэкап базы «Кит» от ${mon.fmtTime(b.mtime, true)}. Восстановить можно из него, если что-то случится с сервером.`);
+    }
+    case 'alerts_menu': return alertsMenu(chat);
+    case 'alerts_on': return setFlagSay(user, chat, 'alerts', true, L);
+    case 'alerts_off': return setFlagSay(user, chat, 'alerts', false, L);
+    case 'daily_on': return setFlagSay(user, chat, 'daily', true, L);
+    case 'daily_off': return setFlagSay(user, chat, 'daily', false, L);
+    default:
+      return say(chat, r.reply ? esc(r.reply) : (L === 'kk'
+        ? 'Түсінбедім. Мысалы: «Сервер қалай?», «Бэкап жаса», «Таңғы есепті өшір».'
+        : 'Не понял. Скажите, например: «Как сервер?», «Сделай бэкап», «Выключи утренний отчёт».'), MENU);
+  }
 }
 
 async function connect(m, code) {
@@ -283,4 +360,4 @@ function startMonitor() {
 }
 function stopMonitor() { if (monitorTimer) clearInterval(monitorTimer); monitorTimer = null; }
 
-module.exports = { start, stop, configure, info, connectLink, checkNow, _test: { active } };
+module.exports = { start, stop, configure, info, connectLink, checkNow, _test: { active, runCommand } };
