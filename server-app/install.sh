@@ -43,7 +43,7 @@ say "3/7 База данных SQLite"
 run_cli init
 
 say "4/7 Вход в админку"
-echo "   Логин и пароль задаются в браузере по одноразовой ссылке (она будет в конце)"
+echo "   Логин и пароль владельца задаются в браузере по одноразовой ссылке"
 
 say "5/7 Служба (работает 24/7, сама перезапускается)"
 cat > /etc/systemd/system/kit-app.service <<EOF
@@ -82,6 +82,34 @@ echo "0 3 * * * kit KIT_DATA=$DATA /usr/bin/node --disable-warning=ExperimentalW
 chmod 644 /etc/cron.d/kit-backup
 # отвязка от GitHub: старое автообновление больше не нужно
 rm -f /etc/cron.d/kit-sync /usr/local/bin/kit-sync.sh
+
+# сторож: каждые 2 минуты проверяет сайт и nginx, при сбое перезапускает и пишет в бот сервера
+cat > /etc/systemd/system/kit-watchdog.service <<EOF
+[Unit]
+Description=Kit watchdog
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=KIT_DATA=$DATA
+StateDirectory=kit-watchdog
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning $APP/watchdog.js
+EOF
+cat > /etc/systemd/system/kit-watchdog.timer <<EOF
+[Unit]
+Description=Kit watchdog every 2 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target
+EOF
+systemctl daemon-reload
+systemctl enable --now kit-watchdog.timer >/dev/null 2>&1
+echo "   Сторож включён: проверка сайта каждые 2 минуты"
 
 say "6/7 SSL-сертификат для $ADMIN_DOMAIN"
 if [ ! -f "/etc/letsencrypt/live/$ADMIN_DOMAIN/fullchain.pem" ]; then

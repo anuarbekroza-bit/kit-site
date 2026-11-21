@@ -125,6 +125,7 @@ async function loop(my) {
 async function configure(newToken) {
   newToken = String(newToken || '').trim();
   if (newToken && !TOKEN_RE.test(newToken)) throw Object.assign(new Error('Это не похоже на токен бота. Он выглядит так: 1234567890:AAH…'), { code: 400 });
+  if (newToken && newToken === store.meta.get('srv_bot_token')) throw Object.assign(new Error('Это токен бота сервера. Для магазина нужен другой бот.'), { code: 400 });
   if (newToken !== store.meta.get('bot_token')) { store.meta.set('bot_token', newToken); store.meta.set('bot_username', ''); offset = 0; }
   return start();
 }

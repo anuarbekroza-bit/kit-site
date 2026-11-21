@@ -160,6 +160,7 @@ function renderSide(){
   side.appendChild(h('div', {'class':'nav-sep'}));
   side.appendChild(h('button', {'class':'nav-item' + (state.view === 'orders' ? ' on' : ''), onclick: function(){ go('orders'); }}, ['📨 Заявки с сайта']));
   side.appendChild(h('button', {'class':'nav-item' + (state.view === 'bot' ? ' on' : ''), onclick: function(){ go('bot'); }}, ['🤖 Telegram-бот']));
+  if (U.log) side.appendChild(h('button', {'class':'nav-item' + (state.view === 'server' ? ' on' : ''), onclick: function(){ go('server'); }}, ['🖥 Сервер']));
   if (U.users) side.appendChild(h('button', {'class':'nav-item' + (state.view === 'users' ? ' on' : ''), onclick: function(){ go('users'); }}, ['👥 Сотрудники и доступ']));
   if (U.log) side.appendChild(h('button', {'class':'nav-item' + (state.view === 'log' ? ' on' : ''), onclick: function(){ go('log'); }}, ['📜 Журнал действий']));
   side.appendChild(h('button', {'class':'nav-item' + (state.view === 'me' ? ' on' : ''), onclick: function(){ go('me'); }}, ['🔑 Мой пароль']));
@@ -177,6 +178,7 @@ function go(view){
   $('#bar').hidden = true;
   if (view === 'orders') return openOrders();
   if (view === 'bot') return openBot();
+  if (view === 'server') return openServer();
   if (view === 'users') return openUsers();
   if (view === 'log') return openLog();
   if (view === 'me') return openMe();
@@ -428,6 +430,103 @@ function openBot(){
   load();
 }
 
+// ---------- сервер ----------
+function fmtBytes(b){ if (b >= 1073741824) return (b / 1073741824).toFixed(1).replace('.', ',') + ' ГБ'; if (b >= 1048576) return Math.round(b / 1048576) + ' МБ'; return Math.max(1, Math.round(b / 1024)) + ' КБ'; }
+function fmtMs(ms){ return new Date(ms).toLocaleString('ru-RU', {timeZone:'Asia/Almaty', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}); }
+function fmtDur(sec){ sec = Math.floor(sec); var d = Math.floor(sec / 86400), hh = Math.floor(sec % 86400 / 3600), mm = Math.floor(sec % 3600 / 60); return d ? d + ' дн. ' + hh + ' ч' : hh ? hh + ' ч ' + mm + ' мин' : mm + ' мин'; }
+function meter(label, pct, detail){
+  var color = pct >= 85 ? 'var(--err)' : pct >= 70 ? '#D9A400' : 'var(--accent)';
+  return h('div', {'class':'box', style:'gap:6px'}, [h('div', {style:'display:flex;justify-content:space-between'}, [h('b', {text: label}), h('b', {text: pct + '%'})]),
+    h('div', {style:'height:8px;border-radius:8px;background:var(--line);overflow:hidden'}, [h('div', {style:'height:100%;width:' + Math.min(100, pct) + '%;background:' + color})]),
+    h('div', {'class':'hint', text: detail})]);
+}
+function openServer(){
+  var view = $('#view'); view.innerHTML = '';
+  view.appendChild(h('h1', {text:'🖥 Сервер'}));
+  view.appendChild(h('p', {'class':'sub', text:'Состояние сервера, бэкапы и отдельный Telegram-бот для тревог. Каждые 5 минут сервер проверяет себя сам, а сторож перезапускает сайт, если тот перестал отвечать.'}));
+  var box = h('div', {text:'Проверяю сервер…'}); view.appendChild(box);
+  function load(){
+    api('GET', '/server').then(function(d){
+      box.innerHTML = '';
+      var s = d.snap;
+      var ok = function(x){ return x ? '✅' : '❌'; };
+      var minSsl = [s.ssl.site, s.ssl.admin].filter(Boolean).sort(function(a, z){ return a.days - z.days; })[0];
+      box.appendChild(h('div', {'class':'box', style: d.problems.length ? 'border-color:var(--err)' : ''}, [
+        h('b', {text: d.problems.length ? '⚠️ Есть проблемы' : '✅ Всё в порядке'}),
+        d.problems.length ? h('ul', {style:'margin:0;padding-left:20px'}, d.problems.map(function(p){ return h('li', {text: p.text}); })) : null,
+        h('div', {style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 18px;font-size:15px'}, [
+          h('div', {text: ok(s.site.ok) + ' Сайт' + (s.site.ok ? ' · ' + (s.site.ms / 1000).toFixed(2).replace('.', ',') + ' с' : '')}),
+          h('div', {text: ok(s.admin.ok) + ' Админка'}),
+          h('div', {text: ok(s.nginx === 'active') + ' Nginx'}),
+          h('div', {text: '🔒 Сертификат: ' + (minSsl ? 'ещё ' + minSsl.days + ' дн.' : 'нет данных')}),
+          h('div', {text: '⏱ Сервер работает ' + fmtDur(s.uptime.server)}),
+          h('div', {text: '🟢 Сайт запущен ' + fmtDur(s.uptime.app) + ' назад'})]),
+        h('div', null, [h('button', {'class':'btn', type:'button', onclick: load}, ['🔄 Обновить'])])]));
+      box.appendChild(h('div', {style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px'}, [
+        meter('⚙️ Процессор', s.cpu.pct, 'нагрузка ' + s.cpu.load1.toFixed(2) + ', ядер: ' + s.cpu.cores),
+        meter('🧠 Память', s.mem.pct, fmtBytes(s.mem.used) + ' из ' + fmtBytes(s.mem.total)),
+        s.disk ? meter('💽 Диск', s.disk.pct, fmtBytes(s.disk.used) + ' из ' + fmtBytes(s.disk.total)) : null]));
+
+      // бэкапы
+      var bmsg = h('span', {'class':'hint'});
+      var bl = h('table', {'class':'tbl'}, [h('tr', null, [h('th', {text:'Когда'}), h('th', {text:'Размер'}), h('th', {text:''})])]);
+      d.backups.slice(0, 10).forEach(function(b){
+        bl.appendChild(h('tr', null, [h('td', {text: fmtMs(b.mtime)}), h('td', {text: fmtBytes(b.size)}),
+          h('td', null, [d.canConfigure ? h('a', {'class':'btn btn-sm', href:'/admin/api/server/backups/' + b.name, download: b.name, text:'Скачать'}) : null])]));
+      });
+      box.appendChild(h('div', {'class':'box'}, [h('b', {text:'💾 Бэкапы базы'}),
+        h('div', {'class':'hint', style:'font-size:15px', text:'Копия делается при каждом сохранении и каждую ночь; хранятся последние 30. Всего сейчас: ' + d.backups.length + '. База весит ' + fmtBytes(s.dbSize) + '.'}),
+        h('div', {style:'display:flex;gap:10px;align-items:center;flex-wrap:wrap'}, [h('button', {'class':'btn btn-main', type:'button', onclick: function(){
+          bmsg.textContent = 'Делаю копию…';
+          api('POST', '/server/backup').then(function(){ setMsg('Бэкап сделан', 'ok'); load(); }).catch(function(e){ bmsg.textContent = e.message; }); }}, ['💾 Сделать бэкап сейчас']), bmsg]),
+        d.backups.length ? bl : null]));
+
+      // бот сервера
+      var b = d.bot;
+      var st = b.status === 'ok' ? h('div', null, ['✅ Бот сервера работает: ', h('a', {href:'https://t.me/' + b.username, target:'_blank', rel:'noopener', text:'@' + b.username})])
+        : b.status === 'error' ? h('div', {style:'color:var(--err);font-weight:600', text:'⚠️ ' + b.lastError})
+        : b.status === 'starting' ? h('div', {text:'⏳ Запускается… обновите через несколько секунд'})
+        : h('div', {text:'Бот сервера ещё не подключён.'});
+      var parts = [h('b', {text:'🤖 Telegram-бот сервера'}), st,
+        h('div', {'class':'hint', style:'font-size:15px', text:'Отдельный бот (не тот, что для заявок): статус по кнопке, бэкап, тревоги, если с сервером что-то не так, и отчёт каждый день в 10:00.'})];
+      if (d.canConfigure) {
+        var tok = h('input', {type:'password', autocomplete:'off', placeholder: b.hasToken ? 'Токен сохранён. Вставьте новый, чтобы заменить' : 'Токен бота сервера: 1234567890:AAH…'});
+        var out = h('div', {'class':'hint'});
+        parts.push(h('label', {'class':'f'}, ['Токен бота сервера (из @BotFather)', tok]));
+        parts.push(h('div', {style:'display:flex;gap:8px;flex-wrap:wrap'}, [
+          h('button', {'class':'btn btn-main', type:'button', onclick: function(){
+            if (!tok.value.trim()) { out.textContent = 'Вставьте токен'; return; }
+            out.textContent = 'Проверяю…';
+            api('PUT', '/server/bot', {token: tok.value.trim()}).then(function(){ load(); }).catch(function(e){ out.textContent = e.message; }); }}, ['Сохранить и запустить']),
+          b.hasToken ? h('button', {'class':'btn btn-danger', type:'button', onclick: function(){
+            if (!confirm('Отключить бота сервера? Тревоги перестанут приходить.')) return;
+            api('PUT', '/server/bot', {token: ''}).then(load).catch(function(e){ alert(e.message); }); }}, ['Отключить']) : null]));
+        parts.push(out);
+      }
+      var linkOut = h('div');
+      parts.push(h('div', null, [h('button', {'class':'btn', type:'button', disabled: b.status !== 'ok', onclick: function(){
+        api('POST', '/server/connect').then(function(j){
+          linkOut.innerHTML = '';
+          linkOut.appendChild(h('a', {'class':'btn btn-main', href: j.url, target:'_blank', rel:'noopener', text:'Открыть бота сервера в Telegram ↗'}));
+          linkOut.appendChild(h('div', {'class':'hint', style:'margin-top:6px', text:'Нажмите в боте «Запустить». Ссылка личная, действует 30 минут.'}));
+        }).catch(function(e){ linkOut.textContent = e.message; }); }}, ['📲 Подключить мой Telegram']), linkOut]));
+      box.appendChild(h('div', {'class':'box'}, parts));
+
+      // кто подключён
+      var t = h('table', {'class':'tbl'}, [h('tr', null, [h('th',{text:'Сотрудник'}), h('th',{text:'Telegram'}), h('th',{text:'Тревоги'}), h('th',{text:'Отчёт в 10:00'}), h('th',{text:''})])]);
+      d.links.forEach(function(l){
+        function flag(f){ var c = h('input', {type:'checkbox'}); c.checked = l[f]; c.onchange = function(){ var b = {}; b[f] = c.checked; api('PUT', '/server/links/' + l.chat_id, b).then(function(){ setMsg('Сохранено', 'ok'); }).catch(function(e){ alert(e.message); }); }; return c; }
+        t.appendChild(h('tr', null, [h('td', null, [h('b', {text: l.name || l.login})]), h('td', {text: l.tg_name || '—'}), h('td', null, [flag('alerts')]), h('td', null, [flag('daily')]),
+          h('td', null, [h('button', {'class':'btn btn-sm btn-danger', type:'button', onclick: function(){
+            if (!confirm('Отключить этот Telegram от бота сервера?')) return;
+            api('DELETE', '/server/links/' + l.chat_id).then(load).catch(function(e){ alert(e.message); }); }}, ['Отключить'])])]));
+      });
+      box.appendChild(h('div', {'class':'box'}, [h('b', {text:'Кому приходят уведомления о сервере'}), d.links.length ? t : h('div', {'class':'hint', text:'Пока никто не подключён.'})]));
+    }).catch(function(e){ box.textContent = e.message; });
+  }
+  load();
+}
+
 // ---------- журнал ----------
 function openLog(){
   var view = $('#view'); view.innerHTML = '';
@@ -457,7 +556,7 @@ function openMe(){
 }
 
 var start = (location.hash || '').slice(1);
-var allowed = U.sections.concat(['orders', 'bot'], U.users ? ['users'] : [], U.log ? ['log'] : [], ['me']);
+var allowed = U.sections.concat(['orders', 'bot'], U.users ? ['users'] : [], U.log ? ['log', 'server'] : [], ['me']);
 go(allowed.indexOf(start) >= 0 ? start : (U.sections[0] || 'me'));
 })();
 `;

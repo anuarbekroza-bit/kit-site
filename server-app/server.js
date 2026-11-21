@@ -12,6 +12,8 @@ const site = require('./site');
 const ui = require('./admin-ui');
 const images = require('./images');
 const bot = require('./bot');
+const srvBot = require('./server-bot');
+const mon = require('./monitor');
 
 const PORT = Number(process.env.PORT || 3000);
 const SITE_URL = process.env.SITE_URL || 'https://kit.r-agent.kz';
@@ -291,6 +293,57 @@ async function admin(req, res, url) {
     return json(res, 200, { ok: true });
   }
 
+  // ---------- сервер: состояние, бэкапы, бот сервера (владелец и администраторы) ----------
+  if (p.startsWith('/admin/api/server')) {
+    if (!role.log) return json(res, 403, { error: 'Раздел «Сервер» доступен владельцу и администраторам' });
+    if (p === '/admin/api/server' && req.method === 'GET') {
+      const snap = await mon.snapshot();
+      const links = store.srv.links().filter(l => role.users || l.user_id === sess.id)
+        .map(l => ({ chat_id: l.chat_id, tg_name: l.tg_name, login: l.login, name: l.name, created_at: l.created_at, alerts: !!l.alerts, daily: !!l.daily }));
+      return json(res, 200, { snap, problems: mon.problems(snap), report: mon.report(snap, false), bot: srvBot.info(), canConfigure: !!role.users, links,
+        backups: store.backupsList().slice(0, 30).map(b => ({ name: b.name, size: b.size, mtime: b.mtime })) });
+    }
+    if (p === '/admin/api/server/bot' && req.method === 'PUT') {
+      if (!role.users) return json(res, 403, { error: 'Токен бота меняет только владелец' });
+      const b = await readJson(req);
+      const inf = await srvBot.configure(b.token);
+      store.log.add(sess.login, b.token ? 'подключил бота сервера' + (inf.username ? ' @' + inf.username : '') : 'отключил бота сервера');
+      return json(res, 200, inf);
+    }
+    if (p === '/admin/api/server/connect' && req.method === 'POST') {
+      const url = srvBot.connectLink(sess.id);
+      if (!url) return json(res, 400, { error: 'Бот сервера ещё не подключён. Владелец должен вставить его токен.' });
+      return json(res, 200, { url });
+    }
+    if ((m = /^\/admin\/api\/server\/links\/(-?\d+)$/.exec(p)) && (req.method === 'DELETE' || req.method === 'PUT')) {
+      const l = store.srv.links().find(x => x.chat_id === m[1]);
+      if (!l) return json(res, 404, { error: 'Не найдено' });
+      if (!role.users && l.user_id !== sess.id) return json(res, 403, { error: 'Нет доступа' });
+      if (req.method === 'DELETE') {
+        store.srv.unlink(m[1]);
+        store.log.add(sess.login, `отключил Telegram ${l.tg_name || ''} (${l.login}) от бота сервера`);
+      } else {
+        const b = await readJson(req);
+        for (const f of ['alerts', 'daily']) if (typeof b[f] === 'boolean') store.srv.setFlag(m[1], f, b[f]);
+      }
+      return json(res, 200, { ok: true });
+    }
+    if (p === '/admin/api/server/backup' && req.method === 'POST') {
+      const file = store.backup();
+      store.log.add(sess.login, 'сделал бэкап вручную');
+      return json(res, 200, { ok: true, name: path.basename(file) });
+    }
+    if ((m = /^\/admin\/api\/server\/backups\/(kit-[\dT-]+\.db)$/.exec(p)) && req.method === 'GET') {
+      if (!role.users) return json(res, 403, { error: 'Скачать бэкап может только владелец' });
+      const b = store.backupsList().find(x => x.name === m[1]);
+      if (!b) return json(res, 404, { error: 'Нет такой копии' });
+      store.log.add(sess.login, 'скачал бэкап ' + b.name);
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${b.name}"`, 'Content-Length': b.size, 'Cache-Control': 'no-store' });
+      return fs.createReadStream(b.path).pipe(res);
+    }
+    return json(res, 404, { error: 'Не найдено' });
+  }
+
   if (p === '/admin/api/log' && req.method === 'GET') {
     if (!role.log) return json(res, 403, { error: 'Нет доступа' });
     return json(res, 200, { data: store.log.list(300) });
@@ -368,6 +421,7 @@ if (require.main === module) {
   setInterval(() => store.sessions.cleanup(), 3600 * 1000).unref();
   bot.setOnChange(() => { siteCache = null; });
   bot.start().then(i => console.log('Telegram-бот:', i.status, i.username ? '@' + i.username : '', i.lastError || ''));
+  srvBot.start().then(i => console.log('Бот сервера:', i.status, i.username ? '@' + i.username : '', i.lastError || ''));
   server.listen(PORT, '127.0.0.1', () => console.log(`Кит: сайт и админка на http://127.0.0.1:${PORT} (админка: ${ADMIN_URL})`));
 }
 

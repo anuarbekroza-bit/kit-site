@@ -262,24 +262,47 @@ const meta = {
 };
 
 // Telegram: какие чаты привязаны к каким сотрудникам
-const tg = {
-  newCode: userId => {
-    const code = crypto.randomBytes(16).toString('base64url');
-    db.prepare('DELETE FROM tg_codes WHERE user_id = ? OR expires < ?').run(userId, Date.now());
-    db.prepare('INSERT INTO tg_codes (hash, user_id, expires) VALUES (?, ?, ?)').run(sha(code), userId, Date.now() + 30 * 60 * 1000);
-    return code;
-  },
-  useCode: code => {
-    const r = db.prepare('SELECT user_id, expires FROM tg_codes WHERE hash = ?').get(sha(code));
-    if (!r) return null;
-    db.prepare('DELETE FROM tg_codes WHERE hash = ?').run(sha(code));
-    return r.expires > Date.now() ? r.user_id : null;
-  },
-  link: (chatId, userId, tgName) => db.prepare('INSERT INTO tg_links (chat_id, user_id, tg_name) VALUES (?, ?, ?) ON CONFLICT(chat_id) DO UPDATE SET user_id = excluded.user_id, tg_name = excluded.tg_name').run(String(chatId), userId, tgName || ''),
-  unlink: chatId => db.prepare('DELETE FROM tg_links WHERE chat_id = ?').run(String(chatId)).changes > 0,
-  userByChat: chatId => db.prepare('SELECT u.id, u.login, u.name, u.role FROM tg_links l JOIN users u ON u.id = l.user_id WHERE l.chat_id = ?').get(String(chatId)),
-  links: () => db.prepare('SELECT l.chat_id, l.tg_name, l.created_at, u.id AS user_id, u.login, u.name, u.role FROM tg_links l JOIN users u ON u.id = l.user_id ORDER BY l.created_at').all(),
-};
+// Привязка чатов Telegram к сотрудникам. Два независимых набора: tg — бот магазина, srv — бот сервера.
+function makeLinks(prefix) {
+  const L = prefix + '_links', C = prefix + '_codes';
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ${L} (
+      chat_id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      tg_name TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      alerts INTEGER NOT NULL DEFAULT 1,
+      daily INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS ${C} (
+      hash TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires INTEGER NOT NULL
+    );`);
+  const cols = db.prepare(`PRAGMA table_info(${L})`).all().map(c => c.name);
+  if (!cols.includes('alerts')) db.exec(`ALTER TABLE ${L} ADD COLUMN alerts INTEGER NOT NULL DEFAULT 1`);
+  if (!cols.includes('daily')) db.exec(`ALTER TABLE ${L} ADD COLUMN daily INTEGER NOT NULL DEFAULT 0`);
+  return {
+    newCode: userId => {
+      const code = crypto.randomBytes(16).toString('base64url');
+      db.prepare(`DELETE FROM ${C} WHERE user_id = ? OR expires < ?`).run(userId, Date.now());
+      db.prepare(`INSERT INTO ${C} (hash, user_id, expires) VALUES (?, ?, ?)`).run(sha(code), userId, Date.now() + 30 * 60 * 1000);
+      return code;
+    },
+    useCode: code => {
+      const r = db.prepare(`SELECT user_id, expires FROM ${C} WHERE hash = ?`).get(sha(code));
+      if (!r) return null;
+      db.prepare(`DELETE FROM ${C} WHERE hash = ?`).run(sha(code));
+      return r.expires > Date.now() ? r.user_id : null;
+    },
+    link: (chatId, userId, tgName) => db.prepare(`INSERT INTO ${L} (chat_id, user_id, tg_name) VALUES (?, ?, ?) ON CONFLICT(chat_id) DO UPDATE SET user_id = excluded.user_id, tg_name = excluded.tg_name`).run(String(chatId), userId, tgName || ''),
+    unlink: chatId => db.prepare(`DELETE FROM ${L} WHERE chat_id = ?`).run(String(chatId)).changes > 0,
+    userByChat: chatId => db.prepare(`SELECT u.id, u.login, u.name, u.role, l.alerts, l.daily FROM ${L} l JOIN users u ON u.id = l.user_id WHERE l.chat_id = ?`).get(String(chatId)),
+    links: () => db.prepare(`SELECT l.chat_id, l.tg_name, l.created_at, l.alerts, l.daily, u.id AS user_id, u.login, u.name, u.role FROM ${L} l JOIN users u ON u.id = l.user_id ORDER BY l.created_at`).all(),
+    setFlag: (chatId, flag, on) => ['alerts', 'daily'].includes(flag) && db.prepare(`UPDATE ${L} SET ${flag} = ? WHERE chat_id = ?`).run(on ? 1 : 0, String(chatId)).changes > 0,
+  };
+}
+let tg, srv;
 
 function backup() {
   const dir = path.join(DATA_DIR, 'backups');
@@ -295,6 +318,17 @@ function backup() {
 }
 
 migrate();
+tg = makeLinks('tg');
+srv = makeLinks('srv');
+
+function backupsList() {
+  const dir = path.join(DATA_DIR, 'backups');
+  try {
+    return fs.readdirSync(dir).filter(f => /^kit-[\dT-]+\.db$/.test(f)).sort().reverse()
+      .map(f => { const st = fs.statSync(path.join(dir, f)); return { name: f, size: st.size, mtime: st.mtimeMs, path: path.join(dir, f) }; });
+  } catch { return []; }
+}
 
 module.exports = { db, DATA_DIR, IMAGES_DIR, getAll, getSection, setSection, isEmpty, seed, users, sessions, setupLinks, log, backup, checkPassword,
-  getItem, updateItem, insertItem, deleteItem, orders, ORDER_STATUS, meta, tg };
+  getItem, updateItem, insertItem, deleteItem, orders, ORDER_STATUS, meta, tg, srv, backupsList,
+  dbFile: path.join(DATA_DIR, 'kit.db') };
