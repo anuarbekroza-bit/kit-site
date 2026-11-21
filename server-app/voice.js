@@ -1,9 +1,9 @@
 'use strict';
 // Голосовое управление ботом «Кит»: русский, казахский и смесь (шала-қазақ).
 // Голосовое (или свободный текст) → ИИ → одна команда в JSON: что сделать и с каким товаром.
-// Поддерживаются два сервиса, выбирается по ключу, который владелец вставляет в админке:
-//   • Google Gemini (ключ начинается с AIza…) — слушает голос сам, одним запросом;
-//   • OpenAI (ключ sk-…) — сначала расшифровка речи, потом разбор команды.
+// Сервис выбирается по ключу, который владелец вставляет в админке:
+//   • OpenAI / ChatGPT (ключ sk-…) — основной: расшифровка речи (gpt-transcribe), потом разбор команды;
+//   • Google Gemini (ключ AIza…) — запасной: слушает голос сам, одним запросом.
 // Без внешних пакетов: только fetch из Node.js 22.
 const store = require('./db');
 
@@ -11,8 +11,8 @@ const GEMINI_API = process.env.GEMINI_API || 'https://generativelanguage.googlea
 const OPENAI_API = process.env.OPENAI_API || 'https://api.openai.com';
 // модели пробуются по очереди: если Google/OpenAI переименует или уберёт модель, бот возьмёт следующую
 const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-flash-latest', 'gemini-2.5-flash'];
-const OPENAI_STT = ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1'];
-const OPENAI_LLM = ['gpt-5-mini', 'gpt-4.1-mini', 'gpt-4o-mini'];
+const OPENAI_STT = ['gpt-transcribe', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1'];
+const OPENAI_LLM = ['gpt-6-luna', 'gpt-5-mini', 'gpt-4.1-mini', 'gpt-4o-mini'];
 
 const ACTIONS = [
   'menu', 'list_products', 'show_product',
@@ -61,7 +61,8 @@ function humanError(m, code, what) {
 }
 
 // модель не найдена / недоступна — пробуем следующую
-const modelMissing = e => e.http === 404 || (e.http === 400 && /model|not found|does not exist|unsupported/i.test(e.raw || ''));
+// (или модель не умеет строгий JSON-ответ — тоже берём следующую)
+const modelMissing = e => e.http === 404 || (e.http === 400 && /model|not found|does not exist|unsupported|not supported|response_format|json_schema/i.test(e.raw || ''));
 
 async function tryModels(kind, list, fn) {
   const order = working[kind] ? [working[kind], ...list.filter(x => x !== working[kind])] : list;
@@ -197,7 +198,8 @@ async function viaGemini(key, { audio, mime, text }, ctx) {
 async function viaOpenAI(key, { audio, mime, text }, ctx) {
   let heard = text;
   if (audio) {
-    const hint = 'Русский и казахский. Магазин детской одежды «Кит». Товары: ' + ctx.products.map(p => p.name_ru).join(', ');
+    const hint = 'Речь на русском и казахском, часто вперемешку. Магазин детской одежды «Кит», Астана. Команды: цена, тенге, рост, скрыть, показать, заявка. Товары: ' +
+      ctx.products.map(p => p.name_ru + (p.name_kk ? ' / ' + p.name_kk : '')).join(', ');
     const j = await tryModels('openai_stt', OPENAI_STT, model => {
       const f = new FormData();
       f.append('model', model);

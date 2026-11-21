@@ -418,7 +418,7 @@ function openBot(){
 
       // голосовое управление
       var v = b.voice || {};
-      var vst = v.status === 'ok' && v.hasKey ? h('div', {text:'✅ Включено (' + (v.provider === 'gemini' ? 'Google Gemini' : 'OpenAI') + '). Отправьте боту голосовое — по-русски или по-казахски.'})
+      var vst = v.status === 'ok' && v.hasKey ? h('div', {text:'✅ Включено (' + (v.provider === 'gemini' ? 'Google Gemini' : 'OpenAI / ChatGPT') + '). Отправьте боту голосовое — по-русски или по-казахски.'})
         : v.status === 'error' ? h('div', {style:'color:var(--err);font-weight:600', text:'⚠️ ' + v.lastError})
         : h('div', {text:'Выключено.'});
       var vparts = [h('b', {text:'🎤 Голосовое управление (русский и казахский)'}), vst];
@@ -428,13 +428,14 @@ function openBot(){
         'Перед любым изменением бот показывает, что понял, и ждёт кнопку «✅ Да».'];
       vparts.push(h('div', {'class':'hint', style:'font-size:15px;line-height:1.6'}, ex.map(function(line){ return h('div', {text: line}); })));
       if (b.canConfigure) {
-        var vkey = h('input', {type:'password', autocomplete:'off', placeholder: v.hasKey ? 'Ключ сохранён. Вставьте новый, чтобы заменить' : 'AIza… или sk-…'});
+        var vkey = h('input', {type:'password', autocomplete:'off', placeholder: v.hasKey ? 'Ключ сохранён. Вставьте новый, чтобы заменить' : 'sk-…'});
         var vout = h('div', {'class':'hint'});
         if (!v.hasKey) vparts.push(h('ol', {style:'margin:0;padding-left:20px;line-height:1.7'}, [
-          h('li', null, ['Откройте ', h('a', {href:'https://aistudio.google.com/apikey', target:'_blank', rel:'noopener', text:'aistudio.google.com/apikey'}), ' и войдите своим Google-аккаунтом.']),
-          h('li', {text:'Нажмите «Create API key» (Создать ключ) и скопируйте ключ — он начинается с AIza…'}),
-          h('li', {text:'Вставьте его сюда и нажмите «Включить».'}),
-          h('li', {'class':'hint', text:'Можно и ключ OpenAI (sk-…) — бот сам поймёт, какой это сервис.'})]));
+          h('li', null, ['Откройте ', h('a', {href:'https://platform.openai.com/api-keys', target:'_blank', rel:'noopener', text:'platform.openai.com/api-keys'}), ' и войдите (можно тем же аккаунтом, что и в ChatGPT).']),
+          h('li', {text:'Нажмите «Create new secret key» (Создать ключ), назовите его, например, «Кит бот», и скопируйте — ключ начинается с sk-…'}),
+          h('li', null, ['Пополните баланс в разделе ', h('a', {href:'https://platform.openai.com/settings/organization/billing/overview', target:'_blank', rel:'noopener', text:'Billing'}), ' — подписка ChatGPT Plus сюда не входит, API оплачивается отдельно. Для голосовых команд хватит минимальной суммы надолго.']),
+          h('li', {text:'Вставьте ключ сюда и нажмите «Включить».'}),
+          h('li', {'class':'hint', text:'Можно и ключ Google Gemini (AIza…) — бот сам поймёт, какой это сервис.'})]));
         vparts.push(h('label', {'class':'f'}, ['Ключ ИИ', vkey]));
         vparts.push(h('div', {style:'display:flex;gap:8px;flex-wrap:wrap'}, [
           h('button', {'class':'btn btn-main', type:'button', onclick: function(){
