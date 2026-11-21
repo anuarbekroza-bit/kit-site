@@ -41,6 +41,27 @@ function migrate() {
       hash TEXT PRIMARY KEY,
       expires INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      at TEXT NOT NULL DEFAULT (datetime('now')),
+      name TEXT NOT NULL DEFAULT '',
+      phone TEXT NOT NULL DEFAULT '',
+      product TEXT NOT NULL DEFAULT '',
+      comment TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'new',
+      handled_by TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS tg_links (
+      chat_id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      tg_name TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS tg_codes (
+      hash TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -107,6 +128,25 @@ function setSettings(key, values) {
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
 }
+
+// Отдельные строки списка (нужно боту: он меняет один товар, не трогая остальные)
+function getItem(key, id) { return getList(key).find(x => x.id === Number(id)) || null; }
+function updateItem(key, id, fields) {
+  const s = byKey[key];
+  for (const f of s.fields) {
+    if (fields[f.name] === undefined) continue;
+    db.prepare(`UPDATE ${q(key)} SET ${q(f.name)} = ? WHERE id = ?`).run(cleanValue(f, fields[f.name]), Number(id));
+  }
+}
+function insertItem(key, fields, atStart) {
+  const s = byKey[key];
+  const r = db.prepare(`SELECT COALESCE(MIN(pos), 0) AS lo, COALESCE(MAX(pos), 0) AS hi FROM ${q(key)}`).get();
+  const names = s.fields.map(f => f.name);
+  const res = db.prepare(`INSERT INTO ${q(key)} (pos, ${names.map(q).join(', ')}) VALUES (?, ${names.map(() => '?').join(', ')})`)
+    .run(atStart ? r.lo - 1 : r.hi + 1, ...s.fields.map(f => cleanValue(f, fields[f.name] === undefined ? f.default : fields[f.name])));
+  return Number(res.lastInsertRowid);
+}
+function deleteItem(key, id) { return db.prepare(`DELETE FROM ${q(key)} WHERE id = ?`).run(Number(id)).changes > 0; }
 
 function getSection(key) { return byKey[key].type === 'list' ? getList(key) : getSettings(key); }
 function setSection(key, data) { return byKey[key].type === 'list' ? setList(key, data) : setSettings(key, data); }
@@ -204,10 +244,49 @@ const log = {
   list: (limit = 200) => db.prepare('SELECT at, user, action FROM log ORDER BY id DESC LIMIT ?').all(limit),
 };
 
+// Заявки с сайта
+const ORDER_STATUS = { new: 'Новая', work: 'В работе', done: 'Выполнена', cancel: 'Отменена' };
+const orders = {
+  create: o => Number(db.prepare('INSERT INTO orders (name, phone, product, comment) VALUES (?, ?, ?, ?)')
+    .run(o.name, o.phone, o.product, o.comment).lastInsertRowid),
+  byId: id => db.prepare('SELECT * FROM orders WHERE id = ?').get(Number(id)),
+  list: (limit = 300, onlyOpen = false) => db.prepare(`SELECT * FROM orders ${onlyOpen ? "WHERE status IN ('new','work')" : ''} ORDER BY id DESC LIMIT ?`).all(limit),
+  setStatus: (id, status, by) => db.prepare('UPDATE orders SET status = ?, handled_by = ? WHERE id = ?').run(status, by || '', Number(id)).changes > 0,
+  countNew: () => db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status = 'new'").get().n,
+};
+
+// Служебные настройки (не показываются на сайте): токен бота и т.п.
+const meta = {
+  get: k => { const r = db.prepare("SELECT value FROM settings WHERE section = '_meta' AND key = ?").get(k); return r ? r.value : ''; },
+  set: (k, v) => db.prepare("INSERT INTO settings (section, key, value) VALUES ('_meta', ?, ?) ON CONFLICT(section, key) DO UPDATE SET value = excluded.value").run(k, String(v ?? '')),
+};
+
+// Telegram: какие чаты привязаны к каким сотрудникам
+const tg = {
+  newCode: userId => {
+    const code = crypto.randomBytes(16).toString('base64url');
+    db.prepare('DELETE FROM tg_codes WHERE user_id = ? OR expires < ?').run(userId, Date.now());
+    db.prepare('INSERT INTO tg_codes (hash, user_id, expires) VALUES (?, ?, ?)').run(sha(code), userId, Date.now() + 30 * 60 * 1000);
+    return code;
+  },
+  useCode: code => {
+    const r = db.prepare('SELECT user_id, expires FROM tg_codes WHERE hash = ?').get(sha(code));
+    if (!r) return null;
+    db.prepare('DELETE FROM tg_codes WHERE hash = ?').run(sha(code));
+    return r.expires > Date.now() ? r.user_id : null;
+  },
+  link: (chatId, userId, tgName) => db.prepare('INSERT INTO tg_links (chat_id, user_id, tg_name) VALUES (?, ?, ?) ON CONFLICT(chat_id) DO UPDATE SET user_id = excluded.user_id, tg_name = excluded.tg_name').run(String(chatId), userId, tgName || ''),
+  unlink: chatId => db.prepare('DELETE FROM tg_links WHERE chat_id = ?').run(String(chatId)).changes > 0,
+  userByChat: chatId => db.prepare('SELECT u.id, u.login, u.name, u.role FROM tg_links l JOIN users u ON u.id = l.user_id WHERE l.chat_id = ?').get(String(chatId)),
+  links: () => db.prepare('SELECT l.chat_id, l.tg_name, l.created_at, u.id AS user_id, u.login, u.name, u.role FROM tg_links l JOIN users u ON u.id = l.user_id ORDER BY l.created_at').all(),
+};
+
 function backup() {
   const dir = path.join(DATA_DIR, 'backups');
   fs.mkdirSync(dir, { recursive: true });
+  // если в эту же секунду копия уже сделана — второй раз не нужна
   const name = path.join(dir, 'kit-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.db');
+  if (fs.existsSync(name)) return name;
   db.exec(`VACUUM INTO '${name.replace(/'/g, "''")}'`);
   // храним 30 последних копий
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.db')).sort();
@@ -217,4 +296,5 @@ function backup() {
 
 migrate();
 
-module.exports = { db, DATA_DIR, IMAGES_DIR, getAll, getSection, setSection, isEmpty, seed, users, sessions, setupLinks, log, backup, checkPassword };
+module.exports = { db, DATA_DIR, IMAGES_DIR, getAll, getSection, setSection, isEmpty, seed, users, sessions, setupLinks, log, backup, checkPassword,
+  getItem, updateItem, insertItem, deleteItem, orders, ORDER_STATUS, meta, tg };

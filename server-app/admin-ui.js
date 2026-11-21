@@ -5,6 +5,7 @@ const { esc } = require('./site');
 const CSS = `
 :root{--ink:#0F2A44;--muted:#5A6B80;--accent:#17739A;--line:#DCE6EE;--bg:#F4F8FB;--card:#fff;--ok:#1E7F4F;--err:#B42318;--sky:#DFF2F9}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 'Manrope',system-ui,-apple-system,sans-serif}
 a{color:var(--accent)}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -157,6 +158,8 @@ function renderSide(){
     side.appendChild(h('button', {'class':'nav-item' + (state.view === s.key ? ' on' : ''), onclick: function(){ go(s.key); }}, [s.icon + ' ' + s.label]));
   });
   side.appendChild(h('div', {'class':'nav-sep'}));
+  side.appendChild(h('button', {'class':'nav-item' + (state.view === 'orders' ? ' on' : ''), onclick: function(){ go('orders'); }}, ['📨 Заявки с сайта']));
+  side.appendChild(h('button', {'class':'nav-item' + (state.view === 'bot' ? ' on' : ''), onclick: function(){ go('bot'); }}, ['🤖 Telegram-бот']));
   if (U.users) side.appendChild(h('button', {'class':'nav-item' + (state.view === 'users' ? ' on' : ''), onclick: function(){ go('users'); }}, ['👥 Сотрудники и доступ']));
   if (U.log) side.appendChild(h('button', {'class':'nav-item' + (state.view === 'log' ? ' on' : ''), onclick: function(){ go('log'); }}, ['📜 Журнал действий']));
   side.appendChild(h('button', {'class':'nav-item' + (state.view === 'me' ? ' on' : ''), onclick: function(){ go('me'); }}, ['🔑 Мой пароль']));
@@ -172,6 +175,8 @@ function go(view){
   var sec = B.sections.filter(function(s){ return s.key === view; })[0];
   if (sec) return openSection(sec);
   $('#bar').hidden = true;
+  if (view === 'orders') return openOrders();
+  if (view === 'bot') return openBot();
   if (view === 'users') return openUsers();
   if (view === 'log') return openLog();
   if (view === 'me') return openMe();
@@ -332,6 +337,97 @@ function openUsers(){
         login.value = name.value = pass.value = ''; load(); }).catch(function(e){ out.textContent = e.message; }); }}, ['Добавить'])]), out]));
 }
 
+// ---------- заявки ----------
+function localTime(at){
+  try { return new Date(String(at).replace(' ', 'T') + 'Z').toLocaleString('ru-RU', {timeZone:'Asia/Almaty', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}); }
+  catch (e) { return at; }
+}
+function openOrders(){
+  var view = $('#view'); view.innerHTML = '';
+  view.appendChild(h('h1', {text:'📨 Заявки с сайта'}));
+  view.appendChild(h('p', {'class':'sub', text:'Клиенты оставляют их кнопкой «Заказать» на сайте. Если подключён Telegram-бот — каждая заявка сразу приходит вам в Telegram.'}));
+  var box = h('div', {text:'Загрузка…'}); view.appendChild(box);
+  api('GET', '/orders').then(function(j){
+    box.innerHTML = '';
+    if (!j.data.length) { box.appendChild(h('div', {'class':'box', text:'Заявок пока нет.'})); return; }
+    var t = h('table', {'class':'tbl'}, [h('tr', null, [h('th',{text:'№'}), h('th',{text:'Когда'}), h('th',{text:'Клиент'}), h('th',{text:'Что хочет'}), h('th',{text:'Статус'})])]);
+    j.data.forEach(function(o){
+      var sel = h('select');
+      Object.keys(j.statuses).forEach(function(k){ var op = h('option', {value:k, text:j.statuses[k]}); if (k === o.status) op.selected = true; sel.appendChild(op); });
+      sel.onchange = function(){ api('PUT', '/orders/' + o.id, {status: sel.value}).then(function(){ setMsg('Статус заявки №' + o.id + ' изменён', 'ok'); }).catch(function(e){ alert(e.message); }); };
+      var wa = 'https://wa.me/' + o.phone + '?text=' + encodeURIComponent('Здравствуйте! Это магазин «Кит». Вы оставили заявку на сайте' + (o.product ? ': ' + o.product : '') + '.');
+      t.appendChild(h('tr', o.status === 'new' ? {style:'background:#FFF9E6'} : null, [
+        h('td', null, [h('b', {text: String(o.id)})]),
+        h('td', {text: localTime(o.at)}),
+        h('td', null, [h('div', {text: o.name}), h('a', {href: wa, target:'_blank', rel:'noopener', text: '+' + o.phone})]),
+        h('td', null, [o.product ? h('div', null, [h('b', {text: o.product})]) : null, o.comment ? h('div', {'class':'hint', style:'font-size:14px', text: o.comment}) : null]),
+        h('td', null, [sel, o.handled_by && o.status !== 'new' ? h('div', {'class':'hint', text: o.handled_by}) : null])]));
+    });
+    box.appendChild(t);
+  }).catch(function(e){ box.textContent = e.message; });
+}
+
+// ---------- Telegram-бот ----------
+function openBot(){
+  var view = $('#view'); view.innerHTML = '';
+  view.appendChild(h('h1', {text:'🤖 Telegram-бот'}));
+  view.appendChild(h('p', {'class':'sub', text:'Заявки с сайта приходят в Telegram, а товары (цена, рост, фото, наличие) можно менять прямо с телефона.'}));
+  var box = h('div', {text:'Загрузка…'}); view.appendChild(box);
+  function load(){
+    api('GET', '/bot').then(function(b){
+      box.innerHTML = '';
+      var st = b.status === 'ok' ? h('div', null, ['✅ Бот работает: ', h('a', {href:'https://t.me/' + b.username, target:'_blank', rel:'noopener', text:'@' + b.username})])
+        : b.status === 'error' ? h('div', {style:'color:var(--err);font-weight:600', text:'⚠️ ' + b.lastError})
+        : b.status === 'starting' ? h('div', {text:'⏳ Бот запускается… обновите страницу через несколько секунд'})
+        : h('div', {text:'Бот ещё не подключён.'});
+      box.appendChild(h('div', {'class':'box'}, [h('b', {text:'Состояние'}), st]));
+
+      if (b.canConfigure) {
+        var tok = h('input', {type:'password', autocomplete:'off', placeholder: b.hasToken ? 'Токен сохранён. Вставьте новый, чтобы заменить' : '1234567890:AAH…'});
+        var out = h('div', {'class':'hint'});
+        box.appendChild(h('div', {'class':'box'}, [h('b', {text: b.hasToken ? 'Токен бота' : 'Шаг 1. Создайте бота и вставьте токен'}),
+          b.hasToken ? null : h('ol', {style:'margin:0;padding-left:20px;line-height:1.7'}, [
+            h('li', null, ['Откройте в Telegram ', h('a', {href:'https://t.me/BotFather', target:'_blank', rel:'noopener', text:'@BotFather'}), ' и нажмите «Запустить».']),
+            h('li', {text:'Отправьте команду /newbot.'}),
+            h('li', {text:'Имя бота — например: Кит — магазин детской одежды.'}),
+            h('li', {text:'Адрес бота — латиницей и в конце bot, например: kit_astana_bot.'}),
+            h('li', {text:'BotFather пришлёт токен — длинную строку вида 1234567890:AAH… Скопируйте её и вставьте сюда.'})]),
+          h('label', {'class':'f'}, ['Токен', tok]),
+          h('div', {style:'display:flex;gap:8px;flex-wrap:wrap'}, [
+            h('button', {'class':'btn btn-main', type:'button', onclick: function(){
+              if (!tok.value.trim()) { out.textContent = 'Вставьте токен'; return; }
+              out.textContent = 'Проверяю…';
+              api('PUT', '/bot', {token: tok.value.trim()}).then(function(){ load(); }).catch(function(e){ out.textContent = e.message; }); }}, ['Сохранить и запустить']),
+            b.hasToken ? h('button', {'class':'btn btn-danger', type:'button', onclick: function(){
+              if (!confirm('Отключить бота? Заявки перестанут приходить в Telegram (на сайте и в админке они останутся).')) return;
+              api('PUT', '/bot', {token: ''}).then(load).catch(function(e){ alert(e.message); }); }}, ['Отключить бота']) : null]),
+          h('div', {'class':'hint', text:'Токен — как пароль от бота: никому его не пересылайте. Он хранится только на вашем сервере.'}), out]));
+      }
+
+      var linkOut = h('div');
+      box.appendChild(h('div', {'class':'box'}, [h('b', {text: b.canConfigure && !b.hasToken ? 'Шаг 2. Подключите свой Telegram' : 'Мой Telegram'}),
+        h('div', {'class':'hint', style:'font-size:15px', text:'Нажмите кнопку — откроется бот. Нажмите в нём «Запустить» (Start). После этого заявки будут приходить вам, а товары можно менять из бота. Так же подключается каждый сотрудник под своим логином.'}),
+        h('div', null, [h('button', {'class':'btn btn-main', type:'button', disabled: b.status !== 'ok', onclick: function(){
+          api('POST', '/bot/connect').then(function(j){
+            linkOut.innerHTML = '';
+            linkOut.appendChild(h('a', {'class':'btn', href: j.url, target:'_blank', rel:'noopener', text:'Открыть бота в Telegram ↗'}));
+            linkOut.appendChild(h('div', {'class':'hint', style:'margin-top:6px', text:'Ссылка личная и одноразовая, действует 30 минут.'}));
+          }).catch(function(e){ linkOut.textContent = e.message; }); }}, ['📲 Подключить мой Telegram'])]), linkOut]));
+
+      var t = h('table', {'class':'tbl'}, [h('tr', null, [h('th',{text:'Сотрудник'}), h('th',{text:'Telegram'}), h('th',{text:'С какого времени'}), h('th',{text:''})])]);
+      b.links.forEach(function(l){
+        t.appendChild(h('tr', null, [h('td', null, [h('b', {text: l.name || l.login}), ' ', h('span', {'class':'hint', text: l.login})]), h('td', {text: l.tg_name || '—'}), h('td', {text: localTime(l.created_at)}),
+          h('td', null, [h('button', {'class':'btn btn-sm btn-danger', type:'button', onclick: function(){
+            if (!confirm('Отключить этот Telegram от админки?')) return;
+            api('DELETE', '/bot/links/' + l.chat_id).then(load).catch(function(e){ alert(e.message); }); }}, ['Отключить'])])]));
+      });
+      box.appendChild(h('div', {'class':'box'}, [h('b', {text: b.canConfigure ? 'Подключённые Telegram' : 'Подключённые Telegram (ваши)'}),
+        b.links.length ? t : h('div', {'class':'hint', text:'Пока никто не подключён.'})]));
+    }).catch(function(e){ box.textContent = e.message; });
+  }
+  load();
+}
+
 // ---------- журнал ----------
 function openLog(){
   var view = $('#view'); view.innerHTML = '';
@@ -361,7 +457,7 @@ function openMe(){
 }
 
 var start = (location.hash || '').slice(1);
-var allowed = U.sections.concat(U.users ? ['users'] : [], U.log ? ['log'] : [], ['me']);
+var allowed = U.sections.concat(['orders', 'bot'], U.users ? ['users'] : [], U.log ? ['log'] : [], ['me']);
 go(allowed.indexOf(start) >= 0 ? start : (U.sections[0] || 'me'));
 })();
 `;

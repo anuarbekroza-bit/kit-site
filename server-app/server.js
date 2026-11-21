@@ -10,6 +10,8 @@ const store = require('./db');
 const { SECTIONS, ROLES, canEdit, byKey } = require('./schema');
 const site = require('./site');
 const ui = require('./admin-ui');
+const images = require('./images');
+const bot = require('./bot');
 
 const PORT = Number(process.env.PORT || 3000);
 const SITE_URL = process.env.SITE_URL || 'https://kit.r-agent.kz';
@@ -31,20 +33,20 @@ function send(res, code, body, type = 'text/html; charset=utf-8', headers = {}) 
 const json = (res, code, obj, headers) => send(res, code, JSON.stringify(obj), 'application/json; charset=utf-8', { 'Cache-Control': 'no-store', ...headers });
 const redirect = (res, to, headers = {}) => { res.writeHead(303, { Location: to, ...headers }); res.end(); };
 
-function readBody(req) {
+function readBody(req, limit = MAX_BODY) {
   return new Promise((resolve, reject) => {
     let size = 0; const chunks = [];
     req.on('data', c => {
       size += c.length;
-      if (size > MAX_BODY) { reject(Object.assign(new Error('Файл слишком большой'), { code: 413 })); req.destroy(); return; }
+      if (size > limit) { reject(Object.assign(new Error('Файл слишком большой'), { code: 413 })); req.destroy(); return; }
       chunks.push(c);
     });
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
 }
-async function readJson(req) {
-  const t = await readBody(req);
+async function readJson(req, limit) {
+  const t = await readBody(req, limit);
   try { return t ? JSON.parse(t) : {}; } catch { throw Object.assign(new Error('Неверные данные'), { code: 400 }); }
 }
 function cookies(req) {
@@ -86,21 +88,7 @@ function serveImage(req, res, name) {
     fs.createReadStream(file).pipe(res);
   });
 }
-function saveUpload(dataUrl) {
-  const m = /^data:(image\/(jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
-  if (!m) throw Object.assign(new Error('Нужна картинка JPG, PNG или WEBP'), { code: 400 });
-  const buf = Buffer.from(m[3], 'base64');
-  const magic = buf.subarray(0, 12);
-  const ok = (m[2] === 'jpeg' && magic[0] === 0xff && magic[1] === 0xd8)
-    || (m[2] === 'png' && magic.toString('hex', 0, 4) === '89504e47')
-    || (m[2] === 'webp' && magic.toString('ascii', 0, 4) === 'RIFF' && magic.toString('ascii', 8, 12) === 'WEBP');
-  if (!ok) throw Object.assign(new Error('Файл не похож на картинку'), { code: 400 });
-  if (buf.length > 10 * 1024 * 1024) throw Object.assign(new Error('Картинка больше 10 МБ'), { code: 413 });
-  const ext = m[2] === 'jpeg' ? '.jpg' : '.' + m[2];
-  const name = 'u-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + crypto.randomBytes(5).toString('hex') + ext;
-  fs.writeFileSync(path.join(store.IMAGES_DIR, name), buf);
-  return '/images/' + name;
-}
+const saveUpload = images.saveDataUrl;
 
 // ---------- проверка данных раздела ----------
 function validate(sec, data) {
@@ -120,6 +108,32 @@ function validate(sec, data) {
     sec.fields.forEach(f => check(f, data[f.name], ''));
   }
   return errs;
+}
+
+// ---------- заявка с сайта ----------
+const orderHits = new Map(); // ip -> [время заявок]
+function normPhone(v) {
+  let d = String(v || '').replace(/\D/g, '');
+  if (d.length === 11 && d[0] === '8') d = '7' + d.slice(1);
+  if (d.length === 10) d = '7' + d;
+  return /^7\d{10}$/.test(d) ? d : '';
+}
+async function siteOrder(req, res) {
+  const ip = clientIp(req);
+  const now = Date.now();
+  const hits = (orderHits.get(ip) || []).filter(t => now - t < 3600 * 1000);
+  if (hits.length >= 5) return json(res, 429, { error: 'Слишком много заявок. Напишите нам в WhatsApp.' });
+  const b = await readJson(req, 10 * 1024);
+  if (b.website) return json(res, 200, { ok: true }); // ловушка для спам-ботов
+  const name = String(b.name || '').trim().slice(0, 60);
+  const phone = normPhone(b.phone);
+  if (!name) return json(res, 400, { error: 'Напишите, как к вам обращаться', field: 'name' });
+  if (!phone) return json(res, 400, { error: 'Проверьте номер телефона: +7 и 10 цифр', field: 'phone' });
+  hits.push(now); orderHits.set(ip, hits);
+  const id = store.orders.create({ name, phone, product: String(b.product || '').trim().slice(0, 120), comment: String(b.comment || '').trim().slice(0, 500) });
+  store.log.add('сайт', `новая заявка №${id} (${name})`);
+  bot.notifyOrder(store.orders.byId(id)).catch(e => console.error('bot notify:', e.message));
+  return json(res, 200, { ok: true, id });
 }
 
 // ---------- админка ----------
@@ -240,6 +254,43 @@ async function admin(req, res, url) {
     return json(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie(req, token, 7 * 24 * 3600) });
   }
 
+  if (p === '/admin/api/orders' && req.method === 'GET') {
+    return json(res, 200, { data: store.orders.list(300), statuses: store.ORDER_STATUS });
+  }
+  if ((m = /^\/admin\/api\/orders\/(\d+)$/.exec(p)) && req.method === 'PUT') {
+    const b = await readJson(req);
+    if (!store.ORDER_STATUS[b.status]) return json(res, 400, { error: 'Неверный статус' });
+    if (!store.orders.setStatus(m[1], b.status, sess.name || sess.login)) return json(res, 404, { error: 'Заявка не найдена' });
+    store.log.add(sess.login, `заявка №${m[1]} → ${store.ORDER_STATUS[b.status]}`);
+    return json(res, 200, { ok: true });
+  }
+
+  if (p === '/admin/api/bot' && req.method === 'GET') {
+    const links = store.tg.links().filter(l => role.users || l.user_id === sess.id)
+      .map(l => ({ chat_id: l.chat_id, tg_name: l.tg_name, login: l.login, name: l.name, created_at: l.created_at }));
+    return json(res, 200, { ...bot.info(), canConfigure: !!role.users, links });
+  }
+  if (p === '/admin/api/bot' && req.method === 'PUT') {
+    if (!role.users) return json(res, 403, { error: 'Токен бота меняет только владелец' });
+    const b = await readJson(req);
+    const inf = await bot.configure(b.token);
+    store.log.add(sess.login, b.token ? 'подключил Telegram-бота' + (inf.username ? ' @' + inf.username : '') : 'отключил Telegram-бота');
+    return json(res, 200, inf);
+  }
+  if (p === '/admin/api/bot/connect' && req.method === 'POST') {
+    const url = bot.connectLink(sess.id);
+    if (!url) return json(res, 400, { error: 'Бот ещё не подключён. Владелец должен вставить токен бота.' });
+    return json(res, 200, { url });
+  }
+  if ((m = /^\/admin\/api\/bot\/links\/(-?\d+)$/.exec(p)) && req.method === 'DELETE') {
+    const l = store.tg.links().find(x => x.chat_id === m[1]);
+    if (!l) return json(res, 404, { error: 'Не найдено' });
+    if (!role.users && l.user_id !== sess.id) return json(res, 403, { error: 'Нет доступа' });
+    store.tg.unlink(m[1]);
+    store.log.add(sess.login, `отключил Telegram ${l.tg_name || ''} (${l.login})`);
+    return json(res, 200, { ok: true });
+  }
+
   if (p === '/admin/api/log' && req.method === 'GET') {
     if (!role.log) return json(res, 403, { error: 'Нет доступа' });
     return json(res, 200, { data: store.log.list(300) });
@@ -295,6 +346,7 @@ const server = http.createServer(async (req, res) => {
       if ((p === '/' || p === '') && String(req.headers.host || '').toLowerCase().startsWith('admin.')) return redirect(res, '/admin/');
       if (p.startsWith('/admin')) return await admin(req, res, url);
     }
+    if (p === '/api/order' && req.method === 'POST') return await siteOrder(req, res);
     if (p === '/' || p === '/index.html') {
       return send(res, 200, siteHtml(), 'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
     }
@@ -314,6 +366,8 @@ if (require.main === module) {
     console.log('База заполнена начальными данными сайта');
   }
   setInterval(() => store.sessions.cleanup(), 3600 * 1000).unref();
+  bot.setOnChange(() => { siteCache = null; });
+  bot.start().then(i => console.log('Telegram-бот:', i.status, i.username ? '@' + i.username : '', i.lastError || ''));
   server.listen(PORT, '127.0.0.1', () => console.log(`Кит: сайт и админка на http://127.0.0.1:${PORT} (админка: ${ADMIN_URL})`));
 }
 

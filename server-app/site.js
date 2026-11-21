@@ -5,6 +5,7 @@ const path = require('path');
 
 const CSS = fs.readFileSync(path.join(__dirname, 'site.css'), 'utf8');
 const LANG_JS = fs.readFileSync(path.join(__dirname, 'site-lang.js'), 'utf8');
+const ORDER_JS = fs.readFileSync(path.join(__dirname, 'site-order.js'), 'utf8');
 
 const esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const or = (a, b) => (a !== undefined && a !== null && String(a) !== '' ? a : b);
@@ -34,7 +35,6 @@ ${has(cat.image)
 </a>`).join('\n');
 
   const prods = d.products.filter(x => x.show).map(p => {
-    const msg = encodeURIComponent('Здравствуйте! Хочу заказать: ' + p.name_ru);
     return `<div class="prod">
 ${has(p.image)
     ? `<img src="${esc(p.image)}" alt="${esc(p.name_ru)}" data-kk-alt="${esc(or(p.name_kk, p.name_ru))}" loading="lazy">`
@@ -45,7 +45,7 @@ ${has(p.sizes) ? `<div class="muted" style="font-size:14px" data-kk="Бойы: $
 ${has(p.price)
     ? `<span class="price">${esc(p.price)} ₸</span>`
     : '<span class="price-ask" data-kk="Бағасын WhatsApp-та сұраңыз">Цену уточняйте в WhatsApp</span>'}
-<a href="${esc(wa)}?text=${msg}" class="order-btn" data-kk="Тапсырыс беру">Заказать</a>
+<button type="button" class="order-btn" data-order="${esc(p.name_ru + (p.sizes ? ' (рост ' + p.sizes + ')' : ''))}" data-kk="Тапсырыс беру">Заказать</button>
 </div>
 </div>`;
   }).join('\n');
@@ -157,7 +157,10 @@ ${prods}
 <div class="grid" style="gap:24px">
 ${steps}
 </div>
-<a href="${esc(wa)}" class="btn" style="align-self:flex-start;background:#fff;color:var(--ink);font-size:17px;padding:16px 28px" data-kk="WhatsApp-қа жазу">Написать в WhatsApp</a>
+<div class="grid" style="gap:12px">
+<button type="button" data-order="" class="btn" style="background:#fff;color:var(--ink);font-size:17px;padding:16px 28px" data-kk="Өтінім қалдыру">Оставить заявку</button>
+<a href="${esc(wa)}" class="btn" style="background:transparent;color:#fff;border:2px solid #fff;font-size:17px;padding:14px 26px" data-kk="WhatsApp-қа жазу">Написать в WhatsApp</a>
+</div>
 </div>
 </section>
 
@@ -224,8 +227,32 @@ ${has(t.store_photo) ? `<img src="${esc(t.store_photo)}" alt="Наш магаз�
 </div>
 </footer>
 
+<dialog class="dlg" id="order-dlg" aria-labelledby="order-title">
+<button type="button" class="x" aria-label="Закрыть" data-kk-label="Жабу">×</button>
+<form novalidate>
+<h3 id="order-title" data-kk="Өтінім қалдыру">Оставить заявку</h3>
+<div class="prod-line" hidden></div>
+<span class="muted" style="font-size:15px" data-kk="Біз сізге хабарласып, өлшемін таңдауға көмектесеміз.">Мы перезвоним или напишем в WhatsApp и поможем с размером.</span>
+<input type="hidden" name="product">
+<label><span data-kk="Атыңыз">Ваше имя</span><input name="name" autocomplete="name" maxlength="60" required></label>
+<label><span data-kk="Телефон (WhatsApp)">Телефон (WhatsApp)</span><input name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" required></label>
+<label><span data-kk="Баланың бойы немесе пікір (міндетті емес)">Рост ребёнка или комментарий (необязательно)</span><textarea name="comment" rows="2" maxlength="500"></textarea></label>
+<input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+<div class="err" role="alert"></div>
+<button type="submit" class="btn btn-main" data-kk="Өтінім жіберу">Отправить заявку</button>
+<div class="alt"><span data-kk="немесе">или</span> <a href="${esc(wa)}" data-kk="WhatsApp-қа жазыңыз">напишите в WhatsApp</a></div>
+</form>
+<div class="done" hidden>
+<div class="ok">✅</div>
+<h3 style="padding:0" data-kk="Рақмет! Өтінім жіберілді">Спасибо! Заявка отправлена</h3>
+<span class="muted" data-kk="Жақын арада хабарласамыз.">Мы скоро свяжемся с вами.</span>
+<button type="button" class="btn btn-line" onclick="this.closest('dialog').close()" data-kk="Жабу">Закрыть</button>
+</div>
+</dialog>
+
 <script>
-${LANG_JS}</script>
+${LANG_JS}
+${ORDER_JS}</script>
 </body>
 </html>
 `;
