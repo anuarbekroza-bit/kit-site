@@ -58,7 +58,7 @@ for f in /etc/systemd/system/kit-app.service "$APP.old/.env" "$APP.old/server-ap
     | sed -E 's/^(Environment="?|export +)//; s/=["'"'"']/=/' | while IFS= read -r line; do
       k=${line%%=*}
       grep -q "^$k=" "$ENV_FILE" || { echo "$line" >> "$ENV_FILE"; echo "   Ключ $k перенесён из $f в $ENV_FILE"; }
-    done
+    done || true   # ключа в файле нет — это нормально, идём дальше
 done
 if grep -qE '^(OPENAI_API_KEY|KIT_OPENAI_KEY|GEMINI_API_KEY)=.+' "$ENV_FILE"; then echo "   Ключ ИИ для голосовых: найден ($ENV_FILE)"
 else echo "   Ключ ИИ для голосовых: не найден на сервере (можно вставить в админке → «Telegram-бот»)"; fi
