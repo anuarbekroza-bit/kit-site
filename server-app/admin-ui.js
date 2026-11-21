@@ -81,6 +81,29 @@ ${msg ? `<div style="color:var(--err);font-weight:600">${esc(msg)}</div>` : ''}
 </form></div></body></html>`;
 }
 
+function setupPage({ token, err, hasOwner, login }) {
+  const msgs = { pass: 'Пароль: минимум 8 символов', same: 'Пароли не совпали', login: 'Логин: 3–32 латинские буквы, цифры, точка, дефис', taken: 'Такой логин уже занят сотрудником', gone: '' };
+  const msg = msgs[err] || '';
+  const bad = !token;
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Настройка входа — админка «Кит»</title><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer"><style>${CSS}
+.login{max-width:420px;margin:10vh auto;padding:0 16px}.hint{color:var(--muted,#667);font-size:14px;line-height:1.45}
+</style></head><body><div class="login">
+<div class="brand" style="justify-content:center;padding-bottom:20px"><i>🐋</i>Админка «Кит»</div>
+${bad ? `<div class="box"><b>Ссылка недействительна</b><p class="hint">Она уже использована или прошло больше 24 часов. Если логин и пароль уже заданы — <a href="/admin/login">войдите</a>.</p></div>` :
+`<form method="post" action="/admin/setup" class="box">
+<b style="font-size:18px">${hasOwner ? 'Новый логин и пароль владельца' : 'Придумайте логин и пароль'}</b>
+<p class="hint" style="margin:0">С ними вы будете входить в админку. Ссылка одноразовая: после сохранения она перестанет работать.</p>
+${msg ? `<div style="color:var(--err);font-weight:600">${esc(msg)}</div>` : ''}
+<input type="hidden" name="t" value="${esc(token)}">
+<label class="f">Логин (латиницей, например roza)<input type="text" name="login" value="${esc(login || '')}" autocomplete="username" autocapitalize="none" pattern="[A-Za-z0-9._\-]{3,32}" required autofocus></label>
+<label class="f">Пароль (минимум 8 символов)<input type="password" name="password" autocomplete="new-password" minlength="8" required></label>
+<label class="f">Пароль ещё раз<input type="password" name="password2" autocomplete="new-password" minlength="8" required></label>
+<button class="btn btn-main" type="submit">Сохранить и войти</button>
+</form>`}
+</div></body></html>`;
+}
+
 function appPage({ user, csrf, sections, roles, siteUrl }) {
   const boot = JSON.stringify({ user, csrf, sections, roles, siteUrl }).replace(/</g, '\\u003c');
   return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -343,4 +366,4 @@ go(allowed.indexOf(start) >= 0 ? start : (U.sections[0] || 'me'));
 })();
 `;
 
-module.exports = { loginPage, appPage };
+module.exports = { setupPage, loginPage, appPage };

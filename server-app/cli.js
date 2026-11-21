@@ -2,6 +2,7 @@
 // Служебные команды (запускаются на сервере):
 //   node cli.js init                 — создать базу и заполнить данными сайта (если пустая)
 //   node cli.js owner                — создать/обновить владельца (логин и пароль читаются из stdin, по строке)
+//   node cli.js setup-link           — одноразовая ссылка (24 ч), чтобы задать логин и пароль владельца в браузере
 //   node cli.js render > index.html  — вывести HTML сайта
 //   node cli.js backup               — копия базы в папку backups
 const fs = require('fs');
@@ -26,6 +27,9 @@ if (cmd === 'init') {
   if (u) { store.users.update(u.id, { password: pass, role: 'owner' }); console.log('Пароль владельца обновлён: ' + login); }
   else { store.users.create(login, name, 'owner', pass); console.log('Владелец создан: ' + login); }
   store.log.add('сервер', 'владелец ' + login + ' создан/обновлён через консоль');
+} else if (cmd === 'setup-link') {
+  const base = (process.env.ADMIN_URL || 'https://admin.r-agent.kz').replace(/\/$/, '');
+  console.log(base + '/admin/setup?t=' + store.setupLinks.create());
 } else if (cmd === 'has-owner') {
   process.exit(store.users.owners() > 0 ? 0 : 1);
 } else if (cmd === 'render') {
@@ -33,5 +37,5 @@ if (cmd === 'init') {
 } else if (cmd === 'backup') {
   console.log(store.backup());
 } else {
-  console.log('Команды: init | owner | has-owner | render | backup');
+  console.log('Команды: init | owner | setup-link | has-owner | render | backup');
 }

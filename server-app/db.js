@@ -37,6 +37,10 @@ function migrate() {
       value TEXT NOT NULL DEFAULT '',
       PRIMARY KEY (section, key)
     );
+    CREATE TABLE IF NOT EXISTS setup_links (
+      hash TEXT PRIMARY KEY,
+      expires INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -148,6 +152,7 @@ const users = {
   create: (login, name, role, password) => db.prepare('INSERT INTO users (login, name, role, pass_hash) VALUES (?, ?, ?, ?)')
     .run(String(login).trim().toLowerCase(), name || '', role, hashPassword(password)),
   update: (id, fields) => {
+    if (fields.login !== undefined) db.prepare('UPDATE users SET login = ? WHERE id = ?').run(String(fields.login).trim().toLowerCase(), id);
     if (fields.name !== undefined) db.prepare('UPDATE users SET name = ? WHERE id = ?').run(fields.name, id);
     if (fields.role !== undefined) db.prepare('UPDATE users SET role = ? WHERE id = ?').run(fields.role, id);
     if (fields.password) {
@@ -157,6 +162,24 @@ const users = {
   },
   remove: id => db.prepare('DELETE FROM users WHERE id = ?').run(id),
   owners: () => db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'owner'").get().n,
+  firstOwner: () => db.prepare("SELECT * FROM users WHERE role = 'owner' ORDER BY id LIMIT 1").get(),
+};
+
+// Одноразовая ссылка, по которой владелец сам задаёт логин и пароль (действует 24 часа)
+const sha = t => crypto.createHash('sha256').update(String(t)).digest('hex');
+const setupLinks = {
+  create: () => {
+    const token = crypto.randomBytes(24).toString('base64url');
+    db.prepare('DELETE FROM setup_links').run();
+    db.prepare('INSERT INTO setup_links (hash, expires) VALUES (?, ?)').run(sha(token), Date.now() + 24 * 3600 * 1000);
+    return token;
+  },
+  valid: token => {
+    if (!token || typeof token !== 'string') return false;
+    const r = db.prepare('SELECT expires FROM setup_links WHERE hash = ?').get(sha(token));
+    return !!r && r.expires > Date.now();
+  },
+  use: token => db.prepare('DELETE FROM setup_links WHERE hash = ?').run(sha(token)).changes > 0,
 };
 
 const sessions = {
@@ -194,4 +217,4 @@ function backup() {
 
 migrate();
 
-module.exports = { db, DATA_DIR, IMAGES_DIR, getAll, getSection, setSection, isEmpty, seed, users, sessions, log, backup, checkPassword };
+module.exports = { db, DATA_DIR, IMAGES_DIR, getAll, getSection, setSection, isEmpty, seed, users, sessions, setupLinks, log, backup, checkPassword };

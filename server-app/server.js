@@ -155,6 +155,35 @@ async function admin(req, res, url) {
     store.log.add(u.login, 'вошёл в админку');
     return redirect(res, '/admin/', { 'Set-Cookie': sessionCookie(req, token, 7 * 24 * 3600) });
   }
+  if (p === '/admin/setup' && req.method === 'GET') {
+    const t = url.searchParams.get('t') || '';
+    const ok = store.setupLinks.valid(t);
+    const owner = store.users.firstOwner();
+    return send(res, 200, ui.setupPage({ token: ok ? t : '', err: url.searchParams.get('e'), hasOwner: !!owner, login: owner ? owner.login : '' }), undefined, { 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store' });
+  }
+  if (p === '/admin/setup' && req.method === 'POST') {
+    const ip = clientIp(req);
+    if (loginBlocked(ip)) return redirect(res, '/admin/login?e=blocked');
+    const form = new URLSearchParams(await readBody(req));
+    const t = form.get('t') || '';
+    if (!store.setupLinks.valid(t)) { loginFailed(ip); return redirect(res, '/admin/setup?e=gone'); }
+    const back = e => redirect(res, '/admin/setup?t=' + encodeURIComponent(t) + '&e=' + e);
+    const login = String(form.get('login') || '').trim().toLowerCase();
+    const pass = String(form.get('password') || '');
+    if (!/^[a-z0-9._-]{3,32}$/.test(login)) return back('login');
+    if (pass.length < 8) return back('pass');
+    if (pass !== String(form.get('password2') || '')) return back('same');
+    const owner = store.users.firstOwner();
+    const other = store.users.byLogin(login);
+    if (other && (!owner || other.id !== owner.id)) return back('taken');
+    if (!store.setupLinks.use(t)) return redirect(res, '/admin/setup?e=gone');
+    let id;
+    if (owner) { store.users.update(owner.id, { login, password: pass }); id = owner.id; }
+    else id = Number(store.users.create(login, login, 'owner', pass).lastInsertRowid);
+    store.log.add(login, 'задал логин и пароль владельца по одноразовой ссылке (' + ip + ')');
+    const token = store.sessions.create(id);
+    return redirect(res, '/admin/', { 'Set-Cookie': sessionCookie(req, token, 7 * 24 * 3600) });
+  }
   if (p === '/admin/logout' && req.method === 'POST') {
     if (sess) store.sessions.remove(sess.token);
     return redirect(res, '/admin/login', { 'Set-Cookie': sessionCookie(req, '', 0) });

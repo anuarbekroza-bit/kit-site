@@ -8,7 +8,7 @@
 
 Установка / обновление кода на сервере:
 
-    ssh -t myserver "curl -fsSL https://raw.githubusercontent.com/anuarbekroza-bit/kit-site/main/server-app/install.sh | sudo bash"
+    ssh myserver "curl -fsSL https://raw.githubusercontent.com/anuarbekroza-bit/kit-site/main/server-app/install.sh | sudo bash"
 
 Данные (товары, тексты, фото) живут только на сервере и при обновлении кода не трогаются.
 Паролей и ключей в этом репозитории нет.

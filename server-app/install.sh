@@ -1,6 +1,6 @@
 #!/bin/bash
 # Установка сайта «Кит» и админки на свой сервер (Node.js + SQLite).
-# Запуск:  ssh -t myserver "curl -fsSL https://raw.githubusercontent.com/anuarbekroza-bit/kit-site/main/server-app/install.sh | sudo bash"
+# Запуск:  ssh myserver "curl -fsSL https://raw.githubusercontent.com/anuarbekroza-bit/kit-site/main/server-app/install.sh | sudo bash"
 # Повторный запуск безопасен: данные в базе не трогаются, обновляется только код.
 set -euo pipefail
 
@@ -42,20 +42,8 @@ run_cli() { runuser -u kit -- env KIT_DATA="$DATA" node --disable-warning=Experi
 say "3/7 База данных SQLite"
 run_cli init
 
-say "4/7 Владелец админки"
-if run_cli has-owner; then
-  echo "   Владелец уже есть — пропускаю"
-else
-  echo "   Придумайте логин и пароль для входа в админку. Пароль никому не отправляйте."
-  while true; do
-    read -rp "   Логин (латиницей, например roza): " LOGIN </dev/tty
-    read -rsp "   Пароль (минимум 8 символов, при вводе не виден): " P1 </dev/tty; echo
-    read -rsp "   Повторите пароль: " P2 </dev/tty; echo
-    if [ "$P1" != "$P2" ]; then echo "   Пароли не совпали, ещё раз."; continue; fi
-    if printf '%s\n%s\n' "$LOGIN" "$P1" | run_cli owner; then break; fi
-  done
-  unset P1 P2
-fi
+say "4/7 Вход в админку"
+echo "   Логин и пароль задаются в браузере по одноразовой ссылке (она будет в конце)"
 
 say "5/7 Служба (работает 24/7, сама перезапускается)"
 cat > /etc/systemd/system/kit-app.service <<EOF
@@ -97,11 +85,16 @@ rm -f /etc/cron.d/kit-sync /usr/local/bin/kit-sync.sh
 
 say "6/7 SSL-сертификат для $ADMIN_DOMAIN"
 if [ ! -f "/etc/letsencrypt/live/$ADMIN_DOMAIN/fullchain.pem" ]; then
-  if certbot certonly --webroot -w /var/www/html -d "$ADMIN_DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email >/dev/null 2>&1; then
+  # порт 80 должен отдавать проверку Let's Encrypt для admin — временно добавляем это в nginx
+  ACME=/etc/nginx/conf.d/kit-acme-tmp.conf
+  printf 'server { listen 80; listen [::]:80; server_name %s; location /.well-known/acme-challenge/ { root /var/www/html; } }\n' "$ADMIN_DOMAIN" > "$ACME"
+  if nginx -t >/dev/null 2>&1; then systemctl reload nginx; else rm -f "$ACME"; fi
+  if certbot certonly --webroot -w /var/www/html -d "$ADMIN_DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email >/tmp/kit-certbot.log 2>&1; then
     echo "   Сертификат получен"
   else
-    echo "   !! Сертификат пока не выдан (адрес $ADMIN_DOMAIN ещё не распространился). Запустите эту же команду ещё раз через 10–15 минут."
+    echo "   !! Сертификат пока не выдан. Причина:"; tail -n 6 /tmp/kit-certbot.log | sed 's/^/      /'
   fi
+  rm -f "$ACME"
 else
   echo "   Сертификат уже есть"
 fi
@@ -180,6 +173,11 @@ ADMIN_OK=$(curl -s -o /dev/null -w '%{http_code}' "https://$ADMIN_DOMAIN/admin/l
 echo "   Сайт:    https://$SITE_DOMAIN  (ответ $SITE_OK)"
 echo "   Админка: https://$ADMIN_DOMAIN  (ответ $ADMIN_OK)"
 if [ "$SITE_OK" = 200 ] && [ "$ADMIN_OK" = 200 ]; then
+  LINK=$(runuser -u kit -- env KIT_DATA="$DATA" ADMIN_URL="https://$ADMIN_DOMAIN" node --disable-warning=ExperimentalWarning "$APP/cli.js" setup-link)
+  echo
+  echo "   Откройте ссылку и задайте логин и пароль (ссылка одноразовая, действует 24 часа):"
+  echo "SETUP-LINK $LINK"
+  echo
   echo "== ГОТОВО"
 else
   echo "== Почти готово: если админка не открылась, запустите команду ещё раз через 10–15 минут."
