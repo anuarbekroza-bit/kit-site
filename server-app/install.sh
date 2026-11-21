@@ -173,10 +173,15 @@ ADMIN_OK=$(curl -s -o /dev/null -w '%{http_code}' "https://$ADMIN_DOMAIN/admin/l
 echo "   Сайт:    https://$SITE_DOMAIN  (ответ $SITE_OK)"
 echo "   Админка: https://$ADMIN_DOMAIN  (ответ $ADMIN_OK)"
 if [ "$SITE_OK" = 200 ] && [ "$ADMIN_OK" = 200 ]; then
-  LINK=$(runuser -u kit -- env KIT_DATA="$DATA" ADMIN_URL="https://$ADMIN_DOMAIN" node --disable-warning=ExperimentalWarning "$APP/cli.js" setup-link)
-  echo
-  echo "   Откройте ссылку и задайте логин и пароль (ссылка одноразовая, действует 24 часа):"
-  echo "SETUP-LINK $LINK"
+  # ссылка для логина/пароля — только при первой установке или если попросили сброс (KIT_RESET=1)
+  if ! run_cli has-owner || [ "${KIT_RESET:-}" = 1 ]; then
+    LINK=$(runuser -u kit -- env KIT_DATA="$DATA" ADMIN_URL="https://$ADMIN_DOMAIN" node --disable-warning=ExperimentalWarning "$APP/cli.js" setup-link)
+    echo
+    echo "   Откройте ссылку и задайте логин и пароль (ссылка одноразовая, действует 24 часа):"
+    echo "SETUP-LINK $LINK"
+  else
+    echo "   Вход в админку — ваш логин и пароль. Забыли? Запустите установку с KIT_RESET=1 — будет ссылка для нового пароля."
+  fi
   echo
   echo "== ГОТОВО"
 else
