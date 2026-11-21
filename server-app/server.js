@@ -12,6 +12,7 @@ const site = require('./site');
 const ui = require('./admin-ui');
 const images = require('./images');
 const bot = require('./bot');
+const voice = require('./voice');
 const srvBot = require('./server-bot');
 const mon = require('./monitor');
 
@@ -270,7 +271,14 @@ async function admin(req, res, url) {
   if (p === '/admin/api/bot' && req.method === 'GET') {
     const links = store.tg.links().filter(l => role.users || l.user_id === sess.id)
       .map(l => ({ chat_id: l.chat_id, tg_name: l.tg_name, login: l.login, name: l.name, created_at: l.created_at }));
-    return json(res, 200, { ...bot.info(), canConfigure: !!role.users, links });
+    return json(res, 200, { ...bot.info(), canConfigure: !!role.users, links, voice: voice.info() });
+  }
+  if (p === '/admin/api/bot/voice' && req.method === 'PUT') {
+    if (!role.users) return json(res, 403, { error: 'Голосовое управление включает только владелец' });
+    const b = await readJson(req);
+    const inf = await voice.configure(b.key);
+    store.log.add(sess.login, b.key ? 'включил голосовое управление ботом (' + (inf.provider === 'gemini' ? 'Google Gemini' : 'OpenAI') + ')' : 'выключил голосовое управление ботом');
+    return json(res, 200, inf);
   }
   if (p === '/admin/api/bot' && req.method === 'PUT') {
     if (!role.users) return json(res, 403, { error: 'Токен бота меняет только владелец' });

@@ -416,6 +416,39 @@ function openBot(){
             linkOut.appendChild(h('div', {'class':'hint', style:'margin-top:6px', text:'Ссылка личная и одноразовая, действует 30 минут.'}));
           }).catch(function(e){ linkOut.textContent = e.message; }); }}, ['📲 Подключить мой Telegram'])]), linkOut]));
 
+      // голосовое управление
+      var v = b.voice || {};
+      var vst = v.status === 'ok' && v.hasKey ? h('div', {text:'✅ Включено (' + (v.provider === 'gemini' ? 'Google Gemini' : 'OpenAI') + '). Отправьте боту голосовое — по-русски или по-казахски.'})
+        : v.status === 'error' ? h('div', {style:'color:var(--err);font-weight:600', text:'⚠️ ' + v.lastError})
+        : h('div', {text:'Выключено.'});
+      var vparts = [h('b', {text:'🎤 Голосовое управление (русский и казахский)'}), vst];
+      if (v.hasKey && v.lastError && v.status !== 'error') vparts.push(h('div', {'class':'hint', text:'Последняя ошибка: ' + v.lastError}));
+      var ex = ['Скажите боту голосом или напишите своими словами, например:', '• «Поставь цену на брюки карго 13 500»', '• «Бомбер закончился, скрой с сайта»',
+        '• «Добавь товар: шапка зимняя, 5 900, на 3–7 лет»', '• «Карго шалбардың бағасы он үш мың»', '• «Өтінімдерді көрсет» · «Заявку 12 в работу»',
+        'Перед любым изменением бот показывает, что понял, и ждёт кнопку «✅ Да».'];
+      vparts.push(h('div', {'class':'hint', style:'font-size:15px;line-height:1.6'}, ex.map(function(line){ return h('div', {text: line}); })));
+      if (b.canConfigure) {
+        var vkey = h('input', {type:'password', autocomplete:'off', placeholder: v.hasKey ? 'Ключ сохранён. Вставьте новый, чтобы заменить' : 'AIza… или sk-…'});
+        var vout = h('div', {'class':'hint'});
+        if (!v.hasKey) vparts.push(h('ol', {style:'margin:0;padding-left:20px;line-height:1.7'}, [
+          h('li', null, ['Откройте ', h('a', {href:'https://aistudio.google.com/apikey', target:'_blank', rel:'noopener', text:'aistudio.google.com/apikey'}), ' и войдите своим Google-аккаунтом.']),
+          h('li', {text:'Нажмите «Create API key» (Создать ключ) и скопируйте ключ — он начинается с AIza…'}),
+          h('li', {text:'Вставьте его сюда и нажмите «Включить».'}),
+          h('li', {'class':'hint', text:'Можно и ключ OpenAI (sk-…) — бот сам поймёт, какой это сервис.'})]));
+        vparts.push(h('label', {'class':'f'}, ['Ключ ИИ', vkey]));
+        vparts.push(h('div', {style:'display:flex;gap:8px;flex-wrap:wrap'}, [
+          h('button', {'class':'btn btn-main', type:'button', onclick: function(){
+            if (!vkey.value.trim()) { vout.textContent = 'Вставьте ключ'; return; }
+            vout.textContent = 'Проверяю ключ…';
+            api('PUT', '/bot/voice', {key: vkey.value.trim()}).then(function(){ load(); }).catch(function(e){ vout.textContent = e.message; }); }}, [v.hasKey ? 'Заменить ключ' : 'Включить']),
+          v.hasKey ? h('button', {'class':'btn btn-danger', type:'button', onclick: function(){
+            if (!confirm('Выключить голосовое управление? Кнопки бота продолжат работать.')) return;
+            api('PUT', '/bot/voice', {key: ''}).then(load).catch(function(e){ alert(e.message); }); }}, ['Выключить']) : null]));
+        vparts.push(h('div', {'class':'hint', text:'Голосовые, список товаров и открытых заявок (имя клиента и товар, без телефонов) отправляются на распознавание в выбранный сервис. Ключ хранится только на вашем сервере.'}));
+        vparts.push(vout);
+      }
+      box.appendChild(h('div', {'class':'box'}, vparts));
+
       var t = h('table', {'class':'tbl'}, [h('tr', null, [h('th',{text:'Сотрудник'}), h('th',{text:'Telegram'}), h('th',{text:'С какого времени'}), h('th',{text:''})])]);
       b.links.forEach(function(l){
         t.appendChild(h('tr', null, [h('td', null, [h('b', {text: l.name || l.login}), ' ', h('span', {'class':'hint', text: l.login})]), h('td', {text: l.tg_name || '—'}), h('td', {text: localTime(l.created_at)}),

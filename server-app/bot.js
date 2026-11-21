@@ -2,11 +2,14 @@
 // Telegram-бот «Кит» для владельца и сотрудников.
 //  • Заявки с сайта сразу приходят всем подключённым сотрудникам (кнопки «В работе» / «Выполнена»).
 //  • Товары можно менять с телефона: цена, рост, название, фото, показать/скрыть, удалить, добавить новый.
+//  • Голосом или обычным текстом на русском и казахском: «поставь цену на карго 13 500», «бомберді сайттан жасыр».
+//    Любое изменение бот сначала показывает и ждёт «✅ Да» — чтобы ошибка распознавания ничего не испортила.
 // Работает в том же процессе, что сайт и админка: long polling, без внешних пакетов.
 // Токен бота вводится в админке (раздел «Telegram-бот») и хранится в базе.
 const store = require('./db');
 const images = require('./images');
 const { canEdit } = require('./schema');
+const voice = require('./voice');
 
 const API = process.env.TG_API || 'https://api.telegram.org';
 const SITE_URL = process.env.SITE_URL || 'https://kit.r-agent.kz';
@@ -20,6 +23,9 @@ let generation = 0;          // меняется при каждом перез�
 let offset = 0;
 let onChange = () => {};
 const pending = new Map();   // chatId -> { step, id, field, draft }
+const planned = new Map();   // chatId -> { plan, at } — голосовая команда ждёт подтверждения
+const PLAN_TTL = 10 * 60 * 1000;
+const MAX_VOICE_SEC = 90;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -56,16 +62,20 @@ function editMsg(msg, text, markup) {
   return msg.photo ? call('editMessageCaption', { ...base, caption: text }) : call('editMessageText', { ...base, text, disable_web_page_preview: true });
 }
 
+async function downloadFile(fileId, what) {
+  const f = await call('getFile', { file_id: fileId });
+  const r = await fetch(`${API}/file/bot${token}/${f.file_path}`, { signal: AbortSignal.timeout(60000) });
+  if (!r.ok) throw new Error('Не удалось скачать ' + what);
+  return Buffer.from(await r.arrayBuffer());
+}
+
 async function downloadPhoto(m) {
   let fileId = null, size = 0;
   if (m.photo && m.photo.length) { const p = m.photo[m.photo.length - 1]; fileId = p.file_id; size = p.file_size || 0; }
   else if (m.document && /^image\//.test(m.document.mime_type || '')) { fileId = m.document.file_id; size = m.document.file_size || 0; }
   if (!fileId) return null;
   if (size > 10 * 1024 * 1024) throw new Error('Фото больше 10 МБ');
-  const f = await call('getFile', { file_id: fileId });
-  const r = await fetch(`${API}/file/bot${token}/${f.file_path}`, { signal: AbortSignal.timeout(60000) });
-  if (!r.ok) throw new Error('Не удалось скачать фото');
-  return Buffer.from(await r.arrayBuffer());
+  return downloadFile(fileId, 'фото');
 }
 
 // ---------- запуск / остановка ----------
@@ -74,6 +84,7 @@ async function start() {
   token = store.meta.get('bot_token');
   username = store.meta.get('bot_username');
   pending.clear();
+  planned.clear();
   if (!token) { status = 'off'; lastError = ''; return info(); }
   status = 'starting';
   try {
@@ -199,15 +210,19 @@ async function handle(up) {
   const user = store.tg.userByChat(chat);
   if (!user) return guest(chat);
 
-  if (text === '/cancel' || text === '✖️ Отмена') { pending.delete(chat); return say(chat, 'Отменено.', MENU); }
+  if (text === '/cancel' || text === '✖️ Отмена') { pending.delete(chat); planned.delete(chat); return say(chat, 'Отменено.', MENU); }
   if (text === '/stop') {
     store.tg.unlink(chat); pending.delete(chat);
     store.log.add(user.login, 'отключил Telegram');
     return say(chat, 'Telegram отключён от админки. Заявки сюда больше не придут.', { remove_keyboard: true });
   }
 
+  // голосовое сообщение (или аудиофайл) — распознаём и выполняем
+  if (m.voice || m.audio) return onVoice(user, chat, m).catch(e => say(chat, '⚠️ ' + esc(e.message)));
+
   const st = pending.get(chat);
   const isMenu = ['📦 Товары', '➕ Новый товар', '📨 Заявки', '🌐 Сайт'].includes(text) || text.startsWith('/');
+  if (isMenu) planned.delete(chat);
   if (st && !isMenu) return input(user, chat, m, text, st).catch(e => say(chat, '⚠️ ' + esc(e.message), CANCEL));
   if (st && isMenu) pending.delete(chat);
 
@@ -215,8 +230,22 @@ async function handle(up) {
   if (text === '➕ Новый товар' || text === '/new') return newProduct(user, chat);
   if (text === '📨 Заявки' || text === '/orders') return listOrders(chat);
   if (text === '🌐 Сайт') return say(chat, `Сайт: ${SITE_URL}\nАдминка: ${ADMIN_URL}`, MENU);
-  return say(chat, `Здравствуйте, ${esc(user.name || user.login)}! Выберите действие кнопками внизу.\n\n` +
-    '📦 <b>Товары</b> — изменить цену, рост, фото, скрыть или удалить\n➕ <b>Новый товар</b> — добавить на сайт с телефона\n📨 <b>Заявки</b> — открытые заявки с сайта', MENU);
+  // обычный текст своими словами — тоже понимаем, если включено голосовое управление
+  if (text && !text.startsWith('/') && voice.enabled()) {
+    return understandAndRun(user, chat, { text }, false).catch(e => say(chat, '⚠️ ' + esc(e.message), MENU));
+  }
+  return sayHelp(user, chat);
+}
+
+function sayHelp(user, chat, lang) {
+  if (lang === 'kk') return say(chat, `Сәлеметсіз бе, ${esc(user.name || user.login)}! Төмендегі батырмаларды басыңыз` +
+    (voice.enabled() ? ' немесе дауыстық хабар жіберіңіз 🎤' : '') + '.\n\n' +
+    '📦 <b>Товары</b> — баға, бой, сурет, жасыру не өшіру\n➕ <b>Новый товар</b> — сайтқа жаңа тауар қосу\n📨 <b>Заявки</b> — сайттан келген өтінімдер' +
+    (voice.enabled() ? '\n\n🎤 Мысалы: «Карго шалбардың бағасы он үш мың бес жүз», «Бомберді сайттан жасыр», «Өтінімдерді көрсет».' : ''), MENU);
+  return say(chat, `Здравствуйте, ${esc(user.name || user.login)}! Выберите действие кнопками внизу` +
+    (voice.enabled() ? ' или просто скажите голосом 🎤 (по-русски или по-казахски)' : '') + '.\n\n' +
+    '📦 <b>Товары</b> — изменить цену, рост, фото, скрыть или удалить\n➕ <b>Новый товар</b> — добавить на сайт с телефона\n📨 <b>Заявки</b> — открытые заявки с сайта' +
+    (voice.enabled() ? '\n\n🎤 Например: «Поставь цену на брюки карго 13 500», «Бомбер закончился, скрой с сайта», «Добавь товар: шапка зимняя, 5 900, на 3–7 лет», «Заявку 12 в работу», «Покажи заявки».' : ''), MENU);
 }
 
 async function guest(chat) {
@@ -291,7 +320,7 @@ function parseField(field, text) {
     if (!t || t.length > 40) return { error: 'Напишите рост коротко, например 110–140 см.' };
     return { value: t };
   }
-  if (field === 'name_ru') {
+  if (field === 'name_ru' || field === 'name_kk') {
     if (!t || t === '-') return { error: 'Название не может быть пустым.' };
     if (t.length > 80) return { error: 'Слишком длинное название (максимум 80 символов).' };
     return { value: t };
@@ -299,7 +328,7 @@ function parseField(field, text) {
   return { error: 'Неизвестное поле' };
 }
 
-const FIELD_WORD = { price: 'цену', sizes: 'рост', name_ru: 'название', image: 'фото' };
+const FIELD_WORD = { price: 'цену', sizes: 'рост', name_ru: 'название', name_kk: 'казахское название', image: 'фото' };
 
 async function input(user, chat, m, text, st) {
   if (!mayEditProducts(user)) { pending.delete(chat); return say(chat, 'У вас нет доступа к товарам.', MENU); }
@@ -402,6 +431,18 @@ async function onCallback(cq) {
     if (st && st.step && st.step.startsWith('new_')) return input(user, chat, {}, '-', st);
     return;
   }
+  if (data === 'vy' || data === 'vn') {
+    const pl = planned.get(chat);
+    planned.delete(chat);
+    if (!pl || Date.now() - pl.at > PLAN_TTL) {
+      await answer('Устарело');
+      return editMsg(msg, '⌛️ Это подтверждение устарело. Скажите команду ещё раз.').catch(() => {});
+    }
+    await answer(data === 'vy' ? 'Выполняю' : 'Отменено');
+    await editMsg(msg, describe(pl.plan, pl.lang) + '\n\n' + (data === 'vy' ? '✅' : '✖️ ' + T(pl.lang, 'nothing'))).catch(() => {});
+    if (data === 'vy') return execPlan(user, chat, pl.plan, pl.lang);
+    return;
+  }
   if (data === 'list') { await answer(); return listProducts(user, chat, msg); }
   if (data === 'new') { await answer(); return newProduct(user, chat); }
 
@@ -462,8 +503,268 @@ async function onCallback(cq) {
   await answer();
 }
 
+// ---------- голосовое управление (русский / казахский) ----------
+const TEXTS = {
+  ru: {
+    heard: '🎤 Услышал', confirm: 'Подтвердить?', yes: '✅ Да', no: '✖️ Нет', nothing: 'Хорошо, ничего не меняю.',
+    saved: '✅ Сохранено — уже на сайте.', added: '✅ Товар добавлен в «Новинки» — уже на сайте.',
+    photo: 'Пришлите фото товара 📷 (лучше вертикальное). Или нажмите «Отмена» — фото можно добавить позже.',
+    which: 'Какой товар? Выберите в списке или скажите название.',
+    notFound: q => `Не нашёл товар «${q}». Выберите в списке:`,
+    noOrder: 'Не понял, какая заявка. Скажите номер, например «заявку 12 в работу».',
+    orderMissing: n => `Заявки №${n} нет.`,
+    noAccess: 'У вас нет доступа к товарам.',
+    askPrice: 'Какую цену поставить? Скажите или напишите число, например 14 500.',
+    askSizes: 'Какой рост? Например «110–140 см».', askName: 'Какое название поставить?',
+    unknown: 'Не понял команду. Скажите, например: «Поставь цену на брюки карго 13 500» или «Покажи заявки».',
+    waitPhoto: 'Жду фото 📷 — голосом его не передать. Или нажмите «Отмена».',
+    tooLong: `Слишком длинное голосовое. Скажите команду коротко (до ${MAX_VOICE_SEC} секунд).`,
+    off: 'Голосовое управление ещё не включено. Владелец может включить его в админке → «Telegram-бот» → «Голосовое управление».',
+    expired: 'Это подтверждение устарело. Скажите команду ещё раз.',
+    nothingToConfirm: 'Подтверждать нечего — скажите команду.',
+    price: (n, p) => `💰 Поставить цену <b>${p} ₸</b> для «${n}»`,
+    clearPrice: n => `💰 Убрать цену у «${n}» (на сайте будет «Цену уточняйте в WhatsApp»)`,
+    sizes: (n, v) => `📏 Поставить рост <b>${v}</b> для «${n}»`,
+    nameRu: (n, v) => `✏️ Переименовать «${n}» → <b>${v}</b>`,
+    nameKk: (n, v) => `✏️ Казахское название «${n}» → <b>${v}</b>`,
+    hide: n => `🙈 Скрыть с сайта «${n}»`, show: n => `👁 Показать на сайте «${n}»`,
+    del: n => `🗑 Удалить с сайта «${n}» насовсем`,
+    add: d => `➕ Добавить новый товар:\n<b>${d.name_ru}</b>` + (d.name_kk ? `\n<i>${d.name_kk}</i>` : '') +
+      `\n💰 ${d.price ? d.price + ' ₸' : 'без цены'}\n📏 ${d.sizes || 'рост не указан'}`,
+    order: (id, s) => `📨 Заявка №${id} → <b>${s}</b>`,
+    st: { work: 'В работе', done: 'Выполнена', cancel: 'Отменена' },
+  },
+  kk: {
+    heard: '🎤 Естідім', confirm: 'Растайсыз ба?', yes: '✅ Иә', no: '✖️ Жоқ', nothing: 'Жақсы, ештеңе өзгертпеймін.',
+    saved: '✅ Сақталды — сайтта жаңарды.', added: '✅ Тауар «Жаңалықтар» бөліміне қосылды — сайтта бар.',
+    photo: 'Тауардың суретін жіберіңіз 📷 (тік сурет жақсы). Немесе «Отмена» батырмасын басыңыз — суретті кейін қосуға болады.',
+    which: 'Қай тауар? Тізімнен таңдаңыз немесе атын айтыңыз.',
+    notFound: q => `«${q}» тауарын таппадым. Тізімнен таңдаңыз:`,
+    noOrder: 'Қай өтінім екенін түсінбедім. Нөмірін айтыңыз, мысалы «12-өтінімді жұмысқа ал».',
+    orderMissing: n => `№${n} өтінім жоқ.`,
+    noAccess: 'Сізде тауарларға рұқсат жоқ.',
+    askPrice: 'Қандай баға қоямыз? Санын айтыңыз не жазыңыз, мысалы 14 500.',
+    askSizes: 'Қандай бой? Мысалы «110–140 см».', askName: 'Қандай атау қоямыз?',
+    unknown: 'Түсінбедім. Мысалы: «Карго шалбардың бағасы 13 500» немесе «Өтінімдерді көрсет» деп айтыңыз.',
+    waitPhoto: 'Сурет күтіп тұрмын 📷 — оны дауыспен жіберу мүмкін емес. Немесе «Отмена» басыңыз.',
+    tooLong: `Дауыстық хабар тым ұзын. Командаңызды қысқаша айтыңыз (${MAX_VOICE_SEC} секундқа дейін).`,
+    off: 'Дауыспен басқару әлі қосылмаған. Иесі оны админкада қоса алады → «Telegram-бот» → «Голосовое управление».',
+    expired: 'Бұл растау ескірді. Командаңызды қайта айтыңыз.',
+    nothingToConfirm: 'Растайтын ештеңе жоқ — командаңызды айтыңыз.',
+    price: (n, p) => `💰 «${n}» бағасын <b>${p} ₸</b> қою`,
+    clearPrice: n => `💰 «${n}» бағасын алып тастау (сайтта «бағасын WhatsApp арқылы нақтылаңыз» деп шығады)`,
+    sizes: (n, v) => `📏 «${n}» үшін бой: <b>${v}</b>`,
+    nameRu: (n, v) => `✏️ «${n}» атауын <b>${v}</b> деп өзгерту`,
+    nameKk: (n, v) => `✏️ «${n}» қазақша атауын <b>${v}</b> деп өзгерту`,
+    hide: n => `🙈 «${n}» сайттан жасыру`, show: n => `👁 «${n}» сайтта қайта көрсету`,
+    del: n => `🗑 «${n}» сайттан біржола өшіру`,
+    add: d => `➕ Жаңа тауар қосу:\n<b>${d.name_ru}</b>` + (d.name_kk ? `\n<i>${d.name_kk}</i>` : '') +
+      `\n💰 ${d.price ? d.price + ' ₸' : 'бағасыз'}\n📏 ${d.sizes || 'бойы көрсетілмеген'}`,
+    order: (id, s) => `📨 №${id} өтінім → <b>${s}</b>`,
+    st: { work: 'Жұмыста', done: 'Орындалды', cancel: 'Жойылды' },
+  },
+};
+function T(lang, key, ...a) { const t = (TEXTS[lang] || TEXTS.ru)[key]; return typeof t === 'function' ? t(...a) : t; }
+
+// что бот сейчас спрашивает — чтобы ИИ понял короткий ответ вроде «пятнадцать тысяч»
+function awaitingText(st) {
+  if (!st) return '';
+  const p = st.id && store.getItem('products', st.id);
+  const n = p ? ` для товара «${p.name_ru}» (id ${p.id})` : '';
+  return {
+    edit: { price: 'новую цену' + n, sizes: 'рост' + n, name_ru: 'новое русское название' + n, name_kk: 'новое казахское название' + n, image: 'фото' + n }[st.field],
+    new_name: 'название нового товара', new_price: 'цену нового товара (можно пропустить)',
+    new_sizes: 'рост нового товара (можно пропустить)', new_photo: 'фото нового товара (можно пропустить)',
+  }[st.step] || '';
+}
+
+async function onVoice(user, chat, m) {
+  const v = m.voice || m.audio;
+  const lang = m.from && m.from.language_code === 'kk' ? 'kk' : 'ru';
+  if (!voice.enabled()) return say(chat, T(lang, 'off'), MENU);
+  if ((v.duration || 0) > MAX_VOICE_SEC) return say(chat, T(lang, 'tooLong'));
+  if ((v.file_size || 0) > 15 * 1024 * 1024) return say(chat, T(lang, 'tooLong'));
+  call('sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => {});
+  const buf = await downloadFile(v.file_id, 'голосовое');
+  const mime = (v.mime_type || 'audio/ogg').split(';')[0];
+  return understandAndRun(user, chat, { audio: buf, mime }, true);
+}
+
+async function understandAndRun(user, chat, inp, isVoice) {
+  if (!isVoice) call('sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => {});
+  const st = pending.get(chat);
+  const pl = planned.get(chat);
+  const products = store.getSection('products');
+  const orders = store.orders.list(15, true).map(o => ({ id: o.id, name: o.name, product: o.product, status: store.ORDER_STATUS[o.status] || o.status }));
+  const r = await voice.understand(inp, {
+    products, orders, awaiting: awaitingText(st),
+    confirming: pl && Date.now() - pl.at < PLAN_TTL ? describe(pl.plan, 'ru').replace(/<[^>]+>/g, '') : '',
+  });
+  if (isVoice && r.transcript) await say(chat, `${T(r.lang, 'heard')}: <i>${esc(r.transcript)}</i>`);
+  return runCommand(user, chat, r, isVoice);
+}
+
+const PRODUCT_ACTIONS = new Set(['list_products', 'show_product', 'set_price', 'clear_price', 'set_sizes', 'set_name_ru', 'set_name_kk', 'set_photo', 'hide', 'show', 'delete', 'add_product']);
+
+async function runCommand(user, chat, r, isVoice) {
+  const L = r.lang;
+  const st = pending.get(chat);
+  const pl = planned.get(chat);
+  const via = isVoice ? 'голосом' : 'текстом';
+
+  // подтверждение / отказ
+  if (r.action === 'yes') {
+    planned.delete(chat);
+    if (!pl) return say(chat, T(L, 'nothingToConfirm'), MENU);
+    if (Date.now() - pl.at > PLAN_TTL) return say(chat, T(L, 'expired'), MENU);
+    return execPlan(user, chat, pl.plan, L);
+  }
+  if (r.action === 'no') {
+    const had = pending.has(chat) || planned.has(chat);
+    pending.delete(chat); planned.delete(chat);
+    return say(chat, had ? T(L, 'nothing') : T(L, 'unknown'), MENU);
+  }
+
+  // ответ на вопрос, который бот задал (цена, рост, название…)
+  if (st && (r.action === 'answer' || r.action === 'skip' || r.action === 'unknown')) {
+    if (st.field === 'image' || st.step === 'new_photo') {
+      if (r.action === 'skip' && st.step === 'new_photo') return input(user, chat, {}, '-', st);
+      return say(chat, T(L, 'waitPhoto'), st.step === 'new_photo' ? SKIP : CANCEL);
+    }
+    if (r.action === 'skip') {
+      if (st.step && st.step.startsWith('new_')) return input(user, chat, {}, '-', st);
+      pending.delete(chat); return say(chat, T(L, 'nothing'), MENU);
+    }
+    const val = r.value || r.transcript;
+    return input(user, chat, {}, val, st).catch(e => say(chat, '⚠️ ' + esc(e.message), CANCEL));
+  }
+  if (st) pending.delete(chat);   // сказали новую команду — старый вопрос забываем
+  planned.delete(chat);
+
+  if (PRODUCT_ACTIONS.has(r.action) && !mayEditProducts(user)) return say(chat, T(L, 'noAccess'), MENU);
+
+  const findProduct = async () => {
+    const p = r.product_id ? store.getItem('products', r.product_id) : null;
+    if (p) return p;
+    await say(chat, r.product_query ? T(L, 'notFound', esc(r.product_query)) : T(L, 'which'));
+    await listProducts(user, chat);
+    return null;
+  };
+  const ask = (plan) => askConfirm(chat, plan, L);
+  let p, v;
+
+  switch (r.action) {
+    case 'menu': return sayHelp(user, chat, L);
+    case 'site': return say(chat, `Сайт: ${SITE_URL}\nАдминка: ${ADMIN_URL}`, MENU);
+    case 'list_products': return listProducts(user, chat);
+    case 'list_orders': return listOrders(chat);
+    case 'show_product': if (!(p = await findProduct())) return; return showProduct(chat, p.id);
+
+    case 'set_price':
+      if (!(p = await findProduct())) return;
+      if (!r.value) { pending.set(chat, { step: 'edit', id: p.id, field: 'price' }); return say(chat, `«${esc(p.name_ru)}»\n${T(L, 'askPrice')}`, CANCEL); }
+      v = parseField('price', r.value);
+      if (v.error || !v.value) { pending.set(chat, { step: 'edit', id: p.id, field: 'price' }); return say(chat, `«${esc(p.name_ru)}»\n${T(L, 'askPrice')}`, CANCEL); }
+      return ask({ kind: 'field', id: p.id, field: 'price', value: v.value, via });
+    case 'clear_price':
+      if (!(p = await findProduct())) return;
+      return ask({ kind: 'field', id: p.id, field: 'price', value: '', via });
+    case 'set_sizes':
+    case 'set_name_ru':
+    case 'set_name_kk': {
+      const field = { set_sizes: 'sizes', set_name_ru: 'name_ru', set_name_kk: 'name_kk' }[r.action];
+      if (!(p = await findProduct())) return;
+      v = r.value ? parseField(field, r.value) : { error: true };
+      if (v.error) {
+        pending.set(chat, { step: 'edit', id: p.id, field });
+        return say(chat, `«${esc(p.name_ru)}»\n${T(L, field === 'sizes' ? 'askSizes' : 'askName')}`, CANCEL);
+      }
+      if (field === 'sizes' && /^\d+([–-]\d+)?$/.test(v.value)) v.value = v.value.replace('-', '–') + ' см';
+      return ask({ kind: 'field', id: p.id, field, value: v.value, via });
+    }
+    case 'set_photo':
+      if (!(p = await findProduct())) return;
+      pending.set(chat, { step: 'edit', id: p.id, field: 'image' });
+      return say(chat, `«${esc(p.name_ru)}»\n${T(L, 'photo')}`, CANCEL);
+    case 'hide':
+    case 'show':
+      if (!(p = await findProduct())) return;
+      return ask({ kind: 'show', id: p.id, value: r.action === 'show', via });
+    case 'delete':
+      if (!(p = await findProduct())) return;
+      return ask({ kind: 'delete', id: p.id, via });
+    case 'add_product': {
+      const n = parseField('name_ru', r.name_ru || r.value);
+      if (n.error) return newProduct(user, chat);   // название не расслышали — обычный пошаговый мастер
+      const pr = r.value && r.value !== r.name_ru ? parseField('price', r.value) : { value: '' };
+      const sz = r.sizes ? parseField('sizes', r.sizes) : { value: '' };
+      const kk = r.name_kk ? parseField('name_kk', r.name_kk) : { value: '' };
+      return ask({ kind: 'add', draft: { name_ru: n.value, name_kk: kk.error ? '' : kk.value, price: pr.error ? '' : pr.value, sizes: sz.error ? '' : sz.value }, via });
+    }
+    case 'order_status': {
+      if (!r.order_id || !r.order_status) return say(chat, T(L, 'noOrder'), MENU);
+      const o = store.orders.byId(r.order_id);
+      if (!o) return say(chat, T(L, 'orderMissing', r.order_id), MENU);
+      return ask({ kind: 'order', id: o.id, value: r.order_status, via });
+    }
+    default:
+      return say(chat, r.reply ? esc(r.reply) : T(L, 'unknown'), MENU);
+  }
+}
+
+function describe(plan, L) {
+  if (plan.kind === 'add') return T(L, 'add', { ...plan.draft, name_ru: esc(plan.draft.name_ru), name_kk: esc(plan.draft.name_kk) });
+  if (plan.kind === 'order') return T(L, 'order', plan.id, T(L, 'st')[plan.value]);
+  const p = store.getItem('products', plan.id);
+  const n = esc(p ? p.name_ru : '?');
+  if (plan.kind === 'show') return plan.value ? T(L, 'show', n) : T(L, 'hide', n);
+  if (plan.kind === 'delete') return T(L, 'del', n);
+  const val = esc(plan.value);
+  return { price: plan.value ? T(L, 'price', n, val) : T(L, 'clearPrice', n), sizes: T(L, 'sizes', n, val), name_ru: T(L, 'nameRu', n, val), name_kk: T(L, 'nameKk', n, val) }[plan.field];
+}
+
+function askConfirm(chat, plan, L) {
+  planned.set(chat, { plan, lang: L, at: Date.now() });
+  return say(chat, describe(plan, L) + '\n\n' + T(L, 'confirm'), { inline_keyboard: [[{ text: T(L, 'yes'), callback_data: 'vy' }, { text: T(L, 'no'), callback_data: 'vn' }]] });
+}
+
+async function execPlan(user, chat, plan, L) {
+  if (plan.kind === 'order') {
+    const o = store.orders.byId(plan.id);
+    if (!o) return say(chat, T(L, 'orderMissing', plan.id), MENU);
+    store.orders.setStatus(o.id, plan.value, user.name || user.login);
+    store.log.add(user.login, `через Telegram (${plan.via}): заявка №${o.id} → ${store.ORDER_STATUS[plan.value]}`);
+    const upd = store.orders.byId(o.id);
+    return say(chat, orderText(upd), orderKb(upd));
+  }
+  if (!mayEditProducts(user)) return say(chat, T(L, 'noAccess'), MENU);
+  if (plan.kind === 'add') {
+    store.backup();
+    const id = store.insertItem('products', { ...plan.draft, show: true }, true);
+    onChange();
+    store.log.add(user.login, `через Telegram (${plan.via}): добавил(а) товар «${plan.draft.name_ru}»`);
+    pending.set(chat, { step: 'edit', id, field: 'image' });
+    await say(chat, T(L, 'added'), MENU);
+    return say(chat, T(L, 'photo'), CANCEL);
+  }
+  const p = store.getItem('products', plan.id);
+  if (!p) return say(chat, 'Этого товара уже нет.', MENU);
+  if (plan.kind === 'delete') {
+    store.backup();
+    store.deleteItem('products', p.id);
+    onChange();
+    store.log.add(user.login, `через Telegram (${plan.via}): удалил(а) товар «${p.name_ru}»`);
+    return say(chat, `🗑 «${esc(p.name_ru)}» ✅`, MENU);
+  }
+  if (plan.kind === 'show') save(user, p.id, { show: plan.value }, `(${plan.via}) ` + (plan.value ? 'вернул(а) на сайт товар' : 'скрыл(а) с сайта товар'));
+  else save(user, p.id, { [plan.field]: plan.value }, `(${plan.via}) изменил(а) ${FIELD_WORD[plan.field]}` +
+    (plan.field === 'price' ? ` (${p.price || '—'} → ${plan.value || '—'})` : '') + ' у товара');
+  await say(chat, T(L, 'saved'), MENU);
+  return showProduct(chat, p.id);
+}
+
 module.exports = {
   start, stop, configure, info, connectLink, notifyOrder,
   setOnChange: fn => { onChange = fn; },
-  _test: { parseField, orderText, cardText },
+  _test: { parseField, orderText, cardText, runCommand, describe },
 };
